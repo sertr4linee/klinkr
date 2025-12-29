@@ -93,11 +93,13 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run compile && npm run build:web",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src --ext ts"
+    "lint": "eslint src --ext ts",
+    "build:web": "cd www && npm install && npm run build",
+    "dev:web": "cd www && npm run dev"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
@@ -111,9 +113,6 @@
   },
   "dependencies": {
     "express": "^4.18.2",
-    "ws": "^8.16.0",
-    "next": "16.1.1",
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "ws": "^8.16.0"
   }
 }
