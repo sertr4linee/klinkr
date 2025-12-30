@@ -8,6 +8,12 @@ export type ChatMessage = {
   content: string;
   timestamp: Date;
   modelId?: string;
+  reasoning?: string;
+  isStreaming?: boolean;
+  tasks?: Array<{
+    title: string;
+    files?: Array<{ name: string; type: string }>;
+  }>;
 };
 
 export type UseChatOptions = {
@@ -88,6 +94,8 @@ export function useChat(options: UseChatOptions = {}) {
           content: "",
           timestamp: new Date(),
           modelId,
+          reasoning: "",
+          isStreaming: true,
         };
 
         // Add assistant message to chat
@@ -124,7 +132,22 @@ export function useChat(options: UseChatOptions = {}) {
                   setMessages((prev) =>
                     prev.map((msg) =>
                       msg.id === assistantMessage.id
-                        ? { ...msg, content: msg.content + data.content }
+                        ? { 
+                            ...msg, 
+                            content: msg.content + data.content,
+                            reasoning: data.reasoning || msg.reasoning,
+                            tasks: data.tasks || msg.tasks,
+                            isStreaming: true
+                          }
+                        : msg
+                    )
+                  );
+                } else {
+                  // Mark streaming as complete
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMessage.id
+                        ? { ...msg, isStreaming: false }
                         : msg
                     )
                   );

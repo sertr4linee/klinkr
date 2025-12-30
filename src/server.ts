@@ -376,7 +376,7 @@ export class WebServer {
             }
         });
 
-        // API: Chat with Copilot
+        // API: Chat with Copilot (avec métadonnées complètes)
         this.app.post('/api/chat', async (req, res) => {
             try {
                 const { messages, modelId, stream = true } = req.body;
@@ -395,32 +395,22 @@ export class WebServer {
                     });
                 }
 
-                // Get the selected model
-                const models = await vscode.lm.selectChatModels({ 
-                    vendor: undefined,
-                    family: undefined,
-                    id: modelId
-                });
+                // Import le chat participant depuis extension.ts
+                const { getChatParticipant } = await import('./extension');
+                const chatParticipant = getChatParticipant();
 
-                if (models.length === 0) {
-                    return res.status(404).json({
-                        success: false,
-                        error: `Model ${modelId} not found`
-                    });
-                }
-
-                const model = models[0];
-
-                // Convert messages to Language Model format
-                const chatMessages: vscode.LanguageModelChatMessage[] = messages.map((msg: any) => {
+                // Convertir l'historique en messages du modèle
+                const history: vscode.LanguageModelChatMessage[] = messages.slice(0, -1).map((msg: any) => {
                     if (msg.role === 'user') {
                         return vscode.LanguageModelChatMessage.User(msg.content);
-                    } else if (msg.role === 'assistant') {
-                        return vscode.LanguageModelChatMessage.Assistant(msg.content);
                     } else {
-                        return vscode.LanguageModelChatMessage.User(msg.content);
+                        return vscode.LanguageModelChatMessage.Assistant(msg.content);
                     }
                 });
+
+                // Le dernier message est le prompt actuel
+                const currentMessage = messages[messages.length - 1];
+                const prompt = currentMessage.content;
 
                 if (stream) {
                     // Set headers for SSE
@@ -429,46 +419,47 @@ export class WebServer {
                     res.setHeader('Connection', 'keep-alive');
 
                     try {
-                        // Send chat request to the model
-                        const chatResponse = await model.sendRequest(
-                            chatMessages,
-                            {},
-                            new vscode.CancellationTokenSource().token
-                        );
+                        // Envoyer la requête via le chat participant
+                        const response = await chatParticipant.sendRequest(prompt, modelId, history);
 
-                        // Stream the response
-                        for await (const fragment of chatResponse.text) {
-                            res.write(`data: ${JSON.stringify({ content: fragment, done: false })}\n\n`);
+                        // Streamer le contenu mot par mot
+                        const words = response.content.split(' ');
+                        
+                        for (const word of words) {
+                            res.write(`data: ${JSON.stringify({ 
+                                content: word + ' ',
+                                done: false 
+                            })}\n\n`);
+                            
+                            // Petit délai pour simuler le streaming naturel
+                            await new Promise(resolve => setTimeout(resolve, 10));
                         }
 
-                        // Send done signal
-                        res.write(`data: ${JSON.stringify({ content: '', done: true })}\n\n`);
+                        // Envoyer les métadonnées à la fin
+                        res.write(`data: ${JSON.stringify({ 
+                            content: '',
+                            done: true,
+                            metadata: response.metadata
+                        })}\n\n`);
+                        
                         res.end();
                     } catch (error: any) {
                         res.write(`data: ${JSON.stringify({ error: error.message, done: true })}\n\n`);
                         res.end();
                     }
                 } else {
-                    // Non-streaming response
+                    // Non-streaming response avec métadonnées
                     try {
-                        const chatResponse = await model.sendRequest(
-                            chatMessages,
-                            {},
-                            new vscode.CancellationTokenSource().token
-                        );
-
-                        let fullResponse = '';
-                        for await (const fragment of chatResponse.text) {
-                            fullResponse += fragment;
-                        }
+                        const response = await chatParticipant.sendRequest(prompt, modelId, history);
 
                         res.json({
                             success: true,
                             message: {
                                 role: 'assistant',
-                                content: fullResponse
+                                content: response.content
                             },
-                            modelId: model.id,
+                            metadata: response.metadata,
+                            modelId: modelId,
                             timestamp: new Date().toISOString()
                         });
                     } catch (error: any) {

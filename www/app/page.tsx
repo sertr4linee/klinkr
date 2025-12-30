@@ -32,6 +32,25 @@ import {
   PromptInputTools,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import {
+  Task,
+  TaskTrigger,
+  TaskContent,
+  TaskItem,
+  TaskItemFile,
+} from "@/components/ai-elements/task";
+import {
+  Reasoning,
+  ReasoningTrigger,
+  ReasoningContent,
+} from "@/components/ai-elements/reasoning";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+  MessageActions,
+  MessageAction,
+} from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { FileTree } from "@/components/file-tree";
@@ -50,7 +69,11 @@ import {
   SendIcon,
   Loader2Icon,
   SparklesIcon,
-  RocketIcon
+  RocketIcon,
+  CopyIcon,
+  ThumbsUpIcon,
+  ThumbsDownIcon,
+  RotateCwIcon
 } from "lucide-react";
 import { useEffect, useRef, useState, useCallback } from "react";
 
@@ -490,31 +513,81 @@ const Example = () => {
 
           {/* Chat Messages */}
           {messages.length > 0 && (
-            <div className="mb-6 max-h-96 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 text-left">
+            <div className="mb-6 space-y-4 max-h-150 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 text-left">
               {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`mb-4 flex ${
-                    msg.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-                >
-                  <div
-                    className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                      msg.role === "user"
-                        ? "bg-blue-600 text-white"
-                        : "bg-zinc-800 text-zinc-100"
-                    }`}
-                  >
-                    <div className="mb-1 flex items-center gap-2 text-xs opacity-70">
-                      <span>{msg.role === "user" ? "You" : "Assistant"}</span>
-                      {msg.modelId && (
-                        <span className="rounded bg-black/20 px-1">
-                          {models.find((m) => m.id === msg.modelId)?.name || msg.modelId}
-                        </span>
-                      )}
-                    </div>
-                    <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
-                  </div>
+                <div key={msg.id}>
+                  {msg.role === "user" ? (
+                    <Message from="user">
+                      <MessageContent>
+                        <MessageResponse>{msg.content}</MessageResponse>
+                      </MessageContent>
+                    </Message>
+                  ) : (
+                    <Message from="assistant">
+                      <MessageContent>
+                        {/* Show reasoning if available */}
+                        {msg.reasoning && (
+                          <Reasoning isStreaming={msg.isStreaming || false}>
+                            <ReasoningTrigger />
+                            <ReasoningContent>
+                              {msg.reasoning}
+                            </ReasoningContent>
+                          </Reasoning>
+                        )}
+                        
+                        {/* Show tasks if available */}
+                        {msg.tasks && msg.tasks.length > 0 && msg.tasks.map((task, idx) => (
+                          <Task key={idx}>
+                            <TaskTrigger title={task.title} />
+                            <TaskContent>
+                              {task.files && task.files.map((file, fileIdx) => (
+                                <TaskItemFile key={fileIdx}>
+                                  {file.name}
+                                </TaskItemFile>
+                              ))}
+                            </TaskContent>
+                          </Task>
+                        ))}
+                        
+                        {/* Main response content */}
+                        <MessageResponse>{msg.content}</MessageResponse>
+                        
+                        {/* Action buttons */}
+                        {!msg.isStreaming && msg.content && (
+                          <MessageActions>
+                            <MessageAction
+                              label="Copy"
+                              tooltip="Copy to clipboard"
+                              onClick={() => navigator.clipboard.writeText(msg.content)}
+                            >
+                              <CopyIcon className="size-4" />
+                            </MessageAction>
+                            <MessageAction
+                              label="Like"
+                              tooltip="Good response"
+                              onClick={() => console.log("Liked:", msg.id)}
+                            >
+                              <ThumbsUpIcon className="size-4" />
+                            </MessageAction>
+                            <MessageAction
+                              label="Dislike"
+                              tooltip="Bad response"
+                              onClick={() => console.log("Disliked:", msg.id)}
+                            >
+                              <ThumbsDownIcon className="size-4" />
+                            </MessageAction>
+                            <MessageAction
+                              label="Retry"
+                              tooltip="Regenerate response"
+                              onClick={() => console.log("Retry:", msg.id)}
+                            >
+                              <RotateCwIcon className="size-4" />
+                            </MessageAction>
+                          </MessageActions>
+                        )}
+                      </MessageContent>
+                    </Message>
+                  )}
                 </div>
               ))}
               <div ref={messagesEndRef} />

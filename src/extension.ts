@@ -1,16 +1,23 @@
 import * as vscode from 'vscode';
 import { WebServer } from './server';
 import { ServerStatusProvider } from './treeView';
+import { CopilotChatParticipant } from './chatParticipant';
 
 let webServer: WebServer | undefined;
 let treeDataProvider: ServerStatusProvider;
 let extensionContext: vscode.ExtensionContext;
+let chatParticipant: CopilotChatParticipant;
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log('Copilot Models Viewer est maintenant actif!');
 
     // Sauvegarder le context
     extensionContext = context;
+    
+    // Initialiser le Chat Participant pour intercepter Copilot
+    chatParticipant = CopilotChatParticipant.getInstance();
+    chatParticipant.activate(context);
+    
     // Créer le provider pour la vue
     treeDataProvider = new ServerStatusProvider();
     const treeView = vscode.window.createTreeView('copilotModelsView', {
@@ -133,6 +140,13 @@ async function startServer() {
         vscode.window.showErrorMessage(`Erreur lors du démarrage du serveur: ${error.message}`);
         treeDataProvider.setServerStatus(false);
     }
+}
+
+/**
+ * Exporter le chat participant pour que le serveur puisse y accéder
+ */
+export function getChatParticipant(): CopilotChatParticipant {
+    return chatParticipant;
 }
 
 export function deactivate() {

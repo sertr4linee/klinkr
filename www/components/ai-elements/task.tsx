@@ -44,7 +44,7 @@ Task.displayName = "Task";
 
 export const TaskTrigger = React.forwardRef<
   HTMLButtonElement,
-  React.ButtonHTMLAttributes<HTMLButtonElement> & { title: string }
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { title?: string }
 >(({ className, title, ...props }, ref) => {
   const { isOpen, setIsOpen } = useTaskContext();
 
@@ -58,7 +58,7 @@ export const TaskTrigger = React.forwardRef<
       onClick={() => setIsOpen(!isOpen)}
       {...props}
     >
-      <span className="text-sm font-medium text-zinc-200">{title}</span>
+      <span className="text-sm font-medium text-zinc-200">{title || "Task"}</span>
       {isOpen ? (
         <ChevronDownIcon className="size-4 text-zinc-400" />
       ) : (
