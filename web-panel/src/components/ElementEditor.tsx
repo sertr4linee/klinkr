@@ -18,10 +18,20 @@ import {
   SparklesIcon,
   CheckCircleIcon,
   AlertCircleIcon,
-  SaveIcon
+  SaveIcon,
+  MoveIcon,
+  GridIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { cssToTailwind, mergeClasses, type FullConversionResult } from '@/lib/css-to-tailwind';
+import { PositionModeSelector, PositionControls, DraggablePreview } from '@/components/position-editor';
+import { 
+  type PositionMode, 
+  type PositionValues, 
+  type GridSize,
+  GRID_SIZES,
+  positionToTailwind 
+} from '@/lib/position-to-tailwind';
 
 export interface ElementStyles {
   // Layout
