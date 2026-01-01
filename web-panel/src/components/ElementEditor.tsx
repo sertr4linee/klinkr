@@ -138,6 +138,18 @@ export function ElementEditor({
   const textDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const lastSelectorRef = useRef<string>('');
   
+  // Position editor state
+  const [positionMode, setPositionMode] = useState<PositionMode>('margin');
+  const [gridSize, setGridSize] = useState<GridSize>(4);
+  const [positionValues, setPositionValues] = useState<PositionValues>({
+    top: 0,
+    right: 'auto',
+    bottom: 'auto',
+    left: 0,
+    translateX: 0,
+    translateY: 0,
+  });
+  
   // Store original values when element is selected
   const originalStylesRef = useRef<ElementStyles>({});
   const originalTextRef = useRef<string>('');
@@ -179,6 +191,18 @@ export function ElementEditor({
       }
     }
   }, [element]);
+
+  // Handle position changes from drag or controls
+  const handlePositionChange = useCallback((newPosition: PositionValues) => {
+    if (!element) return;
+    
+    setPositionValues(newPosition);
+    setHasChanges(true);
+    
+    // Apply live to preview
+    const result = positionToTailwind(positionMode, newPosition);
+    onStyleChange(element.selector, result.cssProperties as Partial<ElementStyles>);
+  }, [element, positionMode, onStyleChange]);
 
   const handleStyleChange = useCallback((key: keyof ElementStyles, value: string) => {
     if (!element) return;
@@ -359,10 +383,14 @@ export function ElementEditor({
 
       {/* Tabs */}
       <Tabs defaultValue="styles" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="w-full justify-start rounded-none border-b border-zinc-800 bg-transparent h-9 shrink-0">
+        <TabsList className="w-full justify-start rounded-none border-b border-zinc-800 bg-transparent h-9 shrink-0 overflow-x-auto">
           <TabsTrigger value="styles" className="text-xs data-[state=active]:bg-zinc-800">
             <PaintbrushIcon className="size-3 mr-1" />
             Styles
+          </TabsTrigger>
+          <TabsTrigger value="position" className="text-xs data-[state=active]:bg-zinc-800">
+            <MoveIcon className="size-3 mr-1" />
+            Position
           </TabsTrigger>
           <TabsTrigger value="layout" className="text-xs data-[state=active]:bg-zinc-800">
             <BoxIcon className="size-3 mr-1" />
