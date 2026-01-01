@@ -109,6 +109,24 @@ const Example = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [activeProjectPath, setActiveProjectPath] = useState<string | null>(null);
+
+  // Calculate port for a project based on its index (starting from 3002)
+  const getProjectPort = useCallback((projectPath: string) => {
+    const projectIndex = nextJsProjects.findIndex(p => p.path === projectPath);
+    return 3002 + Math.max(0, projectIndex);
+  }, [nextJsProjects]);
+
+  // Auto-update preview when a project starts running
+  useEffect(() => {
+    const runningProject = nextJsProjects.find(p => p.status === 'running');
+    if (runningProject && runningProject.port) {
+      setActiveProjectPath(runningProject.path);
+      if (previewOpen) {
+        setPreviewUrl(`http://localhost:${runningProject.port}`);
+      }
+    }
+  }, [nextJsProjects, previewOpen]);
 
   // Detect Next.js projects on initial load (only once when connected)
   const hasDetectedProjects = useRef(false);
@@ -194,16 +212,24 @@ const Example = () => {
   };
 
   const handleStartNextJsProject = (projectPath: string) => {
-    // Use port 3002 to avoid conflicts
-    startNextJsProject(projectPath, 3002);
+    // Use dynamic port based on project index
+    const port = getProjectPort(projectPath);
+    console.log('[Projects] Starting project:', projectPath, 'on port:', port);
+    startNextJsProject(projectPath, port);
+    setActiveProjectPath(projectPath);
   };
 
   const handleStopNextJsProject = (projectPath: string) => {
     stopNextJsProject(projectPath);
+    if (activeProjectPath === projectPath) {
+      setActiveProjectPath(null);
+      setPreviewUrl("");
+    }
   };
 
   const handleOpenPreview = (projectPath: string, port: number) => {
     console.log('[Preview] Opening preview for', projectPath, 'on port', port);
+    setActiveProjectPath(projectPath);
     setPreviewUrl(`http://localhost:${port}`);
     setPreviewOpen(true);
   };

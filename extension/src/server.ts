@@ -713,45 +713,50 @@ export class AppBuilderServer {
       // Determine package manager
       const hasYarnLock = fs.existsSync(path.join(projectPath, 'yarn.lock'));
       const hasPnpmLock = fs.existsSync(path.join(projectPath, 'pnpm-lock.yaml'));
-      const hasBunLock = fs.existsSync(path.join(projectPath, 'bun.lockb'));
+      const hasBunLock = fs.existsSync(path.join(projectPath, 'bun.lockb')) || 
+                         fs.existsSync(path.join(projectPath, 'bun.lock'));
       
-      let command: string;
-      let args: string[];
+      const homeDir = process.env.HOME || '/Users/moneyprinter';
+      
+      // Build the full command with absolute paths
+      let fullCommand: string;
 
       if (hasBunLock) {
-        command = 'bun';
-        args = ['run', 'dev', '--port', String(port)];
+        const bunPath = `${homeDir}/.bun/bin/bun`;
+        fullCommand = `"${bunPath}" run dev --port ${port}`;
       } else if (hasPnpmLock) {
-        command = 'pnpm';
-        args = ['dev', '--port', String(port)];
+        fullCommand = `pnpm dev --port ${port}`;
       } else if (hasYarnLock) {
-        command = 'yarn';
-        args = ['dev', '--port', String(port)];
+        fullCommand = `yarn dev --port ${port}`;
       } else {
-        command = 'npm';
-        args = ['run', 'dev', '--', '--port', String(port)];
+        fullCommand = `npm run dev -- --port ${port}`;
       }
 
-      // Ensure PATH includes common package manager locations on macOS/Linux
+      // Enhanced PATH - include project's node_modules/.bin for local binaries like 'next'
       const additionalPaths = [
+        path.join(projectPath, 'node_modules', '.bin'),  // Local project binaries (next, etc.)
         '/opt/homebrew/bin',
         '/usr/local/bin',
         '/usr/bin',
-        `${process.env.HOME}/.bun/bin`,
-        `${process.env.HOME}/.nvm/versions/node/current/bin`,
-        `${process.env.HOME}/.local/bin`,
+        `${homeDir}/.bun/bin`,
+        `${homeDir}/.nvm/versions/node/current/bin`,
+        `${homeDir}/.local/bin`,
       ].join(':');
       
       const enhancedPath = `${additionalPaths}:${process.env.PATH || ''}`;
 
-      const child = spawn(command, args, {
+      console.log(`[Server] Running: ${fullCommand}`);
+      console.log(`[Server] CWD: ${projectPath}`);
+
+      // Use spawn with shell command directly
+      const child = spawn('/bin/zsh', ['-c', fullCommand], {
         cwd: projectPath,
-        shell: true,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { 
           ...process.env, 
           PORT: String(port),
-          PATH: enhancedPath
+          PATH: enhancedPath,
+          HOME: homeDir
         }
       });
 
@@ -894,6 +899,9 @@ export class AppBuilderServer {
 
   private async detectMCPServers(): Promise<any[]> {
     try {
+      const servers: any[] = [];
+      
+      // Check VS Code settings for MCP servers
       const config = vscode.workspace.getConfiguration();
       
       // Check for MCP servers in different possible configuration locations
@@ -903,60 +911,44 @@ export class AppBuilderServer {
         config.get<any>('github.copilot.chat.codeGeneration.mcp.servers') ||
         {};
 
-      console.log('[Server] MCP Config:', JSON.stringify(mcpConfig, null, 2));
+      console.log('[Server] VS Code MCP Config:', Object.keys(mcpConfig).length, 'servers');
 
-      const servers: any[] = [];
-
-      // Parse MCP server configurations and fetch their tools
+      // Parse MCP server configurations
       for (const [name, serverConfig] of Object.entries(mcpConfig as Record<string, any>)) {
         if (serverConfig && typeof serverConfig === 'object') {
-          const server: any = {
+          servers.push({
             name,
             command: serverConfig.command || '',
             args: Array.isArray(serverConfig.args) ? serverConfig.args : [],
             env: serverConfig.env || {},
             status: 'active',
             description: serverConfig.description || `MCP server: ${name}`,
-            tools: []
-          };
-          
-          // Fetch tools from the MCP server
-          try {
-            const tools = await this.fetchMCPTools(server);
-            server.tools = tools;
-            console.log(`[Server] Fetched ${tools.length} tools from ${name}`);
-          } catch (error) {
-            console.error(`[Server] Error fetching tools from ${name}:`, error);
-            server.status = 'error';
-          }
-          
-          servers.push(server);
+            tools: [] // Tools are managed by VS Code/Copilot, not us
+          });
         }
       }
 
-      // Also check settings.json directly if available
+      // Also check workspace .vscode/settings.json
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
       if (workspaceFolder) {
         const settingsPath = path.join(workspaceFolder.uri.fsPath, '.vscode', 'settings.json');
         if (fs.existsSync(settingsPath)) {
           try {
             const settingsContent = fs.readFileSync(settingsPath, 'utf-8');
-            const settings = JSON.parse(settingsContent);
+            // Remove comments from JSON
+            const cleanJson = settingsContent.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+            const settings = JSON.parse(cleanJson);
             
             // Check various MCP configuration keys
-            const mcpKeys = [
-              'mcp.servers',
-              'mcpServers',
-              'github.copilot.chat.codeGeneration.mcp.servers'
-            ];
+            const mcpKeys = ['mcp.servers', 'mcpServers', 'mcp'];
 
             for (const key of mcpKeys) {
               const mcpServers = this.getNestedProperty(settings, key);
               if (mcpServers && typeof mcpServers === 'object') {
                 for (const [name, serverConfig] of Object.entries(mcpServers as Record<string, any>)) {
                   // Avoid duplicates
-                  if (!servers.find(s => s.name === name)) {
-                    const server: any = {
+                  if (!servers.find(s => s.name === name) && serverConfig && typeof serverConfig === 'object') {
+                    servers.push({
                       name,
                       command: serverConfig.command || '',
                       args: Array.isArray(serverConfig.args) ? serverConfig.args : [],
@@ -964,19 +956,7 @@ export class AppBuilderServer {
                       status: 'active',
                       description: serverConfig.description || `MCP server: ${name}`,
                       tools: []
-                    };
-                    
-                    // Fetch tools from the MCP server
-                    try {
-                      const tools = await this.fetchMCPTools(server);
-                      server.tools = tools;
-                      console.log(`[Server] Fetched ${tools.length} tools from ${name}`);
-                    } catch (error) {
-                      console.error(`[Server] Error fetching tools from ${name}:`, error);
-                      server.status = 'error';
-                    }
-                    
-                    servers.push(server);
+                    });
                   }
                 }
               }
@@ -985,8 +965,38 @@ export class AppBuilderServer {
             console.error('[Server] Error reading settings.json:', error);
           }
         }
+        
+        // Check mcp.json in workspace root
+        const mcpJsonPath = path.join(workspaceFolder.uri.fsPath, '.vscode', 'mcp.json');
+        if (fs.existsSync(mcpJsonPath)) {
+          try {
+            const mcpContent = fs.readFileSync(mcpJsonPath, 'utf-8');
+            const cleanJson = mcpContent.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+            const mcpJson = JSON.parse(cleanJson);
+            
+            const mcpServers = mcpJson.servers || mcpJson;
+            if (mcpServers && typeof mcpServers === 'object') {
+              for (const [name, serverConfig] of Object.entries(mcpServers as Record<string, any>)) {
+                if (!servers.find(s => s.name === name) && serverConfig && typeof serverConfig === 'object') {
+                  servers.push({
+                    name,
+                    command: serverConfig.command || '',
+                    args: Array.isArray(serverConfig.args) ? serverConfig.args : [],
+                    env: serverConfig.env || {},
+                    status: 'active',
+                    description: serverConfig.description || `MCP server: ${name}`,
+                    tools: []
+                  });
+                }
+              }
+            }
+          } catch (error) {
+            console.error('[Server] Error reading mcp.json:', error);
+          }
+        }
       }
 
+      console.log(`[Server] Found ${servers.length} MCP servers total`);
       return servers;
     } catch (error) {
       console.error('[Server] Error detecting MCP servers:', error);

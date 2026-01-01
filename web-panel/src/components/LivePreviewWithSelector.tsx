@@ -39,6 +39,11 @@ interface ElementInfo {
   id?: string;
   className?: string;
   textContent?: string;
+  fullTextContent?: string;
+  directTextContent?: string;
+  hasChildren?: boolean;
+  childCount?: number;
+  isComplexText?: boolean;
   rect: {
     x: number;
     y: number;
@@ -132,6 +137,11 @@ export function LivePreviewWithSelector({
         id: bounds.id || undefined,
         className: bounds.className || undefined,
         textContent: bounds.textContent,
+        fullTextContent: bounds.fullTextContent,
+        directTextContent: bounds.directTextContent,
+        hasChildren: bounds.hasChildren,
+        childCount: bounds.childCount,
+        isComplexText: bounds.isComplexText,
         rect: {
           x: bounds.x,
           y: bounds.y,
@@ -284,6 +294,11 @@ export function LivePreviewWithSelector({
       id: selectedElement.id,
       className: selectedElement.className,
       textContent: selectedElement.textContent,
+      fullTextContent: selectedElement.fullTextContent,
+      directTextContent: selectedElement.directTextContent,
+      hasChildren: selectedElement.hasChildren,
+      childCount: selectedElement.childCount,
+      isComplexText: selectedElement.isComplexText,
       styles: {
         display: selectedElement.computedStyles.display,
         position: selectedElement.computedStyles.position,
@@ -483,7 +498,7 @@ export function LivePreviewWithSelector({
               onStyleChange={handleStyleChange}
               onTextChange={handleTextChange}
               onApplyToCode={handleApplyToCode}
-              className="w-96 border-l border-zinc-800"
+              className="w-96 border-l border-zinc-800 h-full max-h-screen"
             />
           ) : (
             <ElementSelectorSidebar

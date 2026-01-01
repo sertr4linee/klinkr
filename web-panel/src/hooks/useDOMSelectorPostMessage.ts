@@ -14,6 +14,11 @@ export interface ElementBounds {
   computedStyles?: Record<string, string>;
   attributes?: Record<string, string>;
   textContent?: string;
+  fullTextContent?: string;
+  directTextContent?: string;
+  hasChildren?: boolean;
+  childCount?: number;
+  isComplexText?: boolean;
   children?: number;
 }
 
@@ -96,6 +101,46 @@ const INJECTION_SCRIPT = `
     return path.join(' > ');
   }
 
+  // Get direct text content (not from children)
+  function getDirectTextContent(element) {
+    let text = '';
+    for (let i = 0; i < element.childNodes.length; i++) {
+      const node = element.childNodes[i];
+      if (node.nodeType === Node.TEXT_NODE) {
+        text += node.textContent || '';
+      }
+    }
+    return text.trim();
+  }
+  
+  // Get information about the element's text structure
+  function getTextInfo(element) {
+    const hasChildElements = element.children.length > 0;
+    const directText = getDirectTextContent(element);
+    const fullText = element.textContent?.trim() || '';
+    
+    // For elements with children, we might want to show what's editable
+    if (hasChildElements) {
+      return {
+        displayText: directText || fullText.substring(0, 100),
+        fullText: fullText,
+        directText: directText,
+        hasChildren: true,
+        childCount: element.children.length,
+        isComplex: directText !== fullText
+      };
+    }
+    
+    return {
+      displayText: fullText,
+      fullText: fullText,
+      directText: fullText,
+      hasChildren: false,
+      childCount: 0,
+      isComplex: false
+    };
+  }
+
   function sendBounds(element, type) {
     if (!element) {
       window.parent.postMessage({ 
@@ -106,6 +151,8 @@ const INJECTION_SCRIPT = `
     }
     
     const rect = element.getBoundingClientRect();
+    const textInfo = getTextInfo(element);
+    
     window.parent.postMessage({
       type: 'dom-selector-' + type,
       bounds: {
@@ -116,7 +163,13 @@ const INJECTION_SCRIPT = `
         selector: getUniqueSelector(element),
         tagName: element.tagName.toLowerCase(),
         id: element.id || undefined,
-        className: element.className || undefined
+        className: element.className || undefined,
+        textContent: textInfo.displayText,
+        fullTextContent: textInfo.fullText,
+        directTextContent: textInfo.directText,
+        hasChildren: textInfo.hasChildren,
+        childCount: textInfo.childCount,
+        isComplexText: textInfo.isComplex
       }
     }, '*');
   }
@@ -138,9 +191,35 @@ const INJECTION_SCRIPT = `
   function handleMouseMove(e) {
     if (!isInspecting) return;
     
-    const element = document.elementFromPoint(e.clientX, e.clientY);
+    let element = document.elementFromPoint(e.clientX, e.clientY);
     if (!element || element === hoverOverlay || element === document.body || element === document.documentElement) {
       return;
+    }
+    
+    // Prefer selecting text-containing elements over containers
+    // If element has no text but children do, try to find the most specific text element
+    if (element.children.length > 0) {
+      const textElements = [];
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+      let node;
+      while (node = walker.nextNode()) {
+        if (node.textContent?.trim() && node.parentElement) {
+          textElements.push(node.parentElement);
+        }
+      }
+      
+      // Find the smallest element under cursor that contains text
+      for (const textEl of textElements) {
+        const rect = textEl.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.right &&
+            e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          // Prefer smaller, more specific elements
+          if (!element.contains(textEl) || textEl.children.length < element.children.length) {
+            element = textEl;
+            break;
+          }
+        }
+      }
     }
     
     if (element !== currentElement) {
@@ -157,8 +236,35 @@ const INJECTION_SCRIPT = `
     e.stopPropagation();
     e.stopImmediatePropagation();
     
-    const element = document.elementFromPoint(e.clientX, e.clientY);
+    let element = document.elementFromPoint(e.clientX, e.clientY);
     if (element && element !== hoverOverlay) {
+      // Find the most specific text element at click point
+      if (element.children.length > 0) {
+        const clickX = e.clientX;
+        const clickY = e.clientY;
+        
+        // Get all text-containing descendants
+        const candidates = [];
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+        let node;
+        while (node = walker.nextNode()) {
+          if (node.textContent?.trim() && node.parentElement) {
+            const parent = node.parentElement;
+            const rect = parent.getBoundingClientRect();
+            if (clickX >= rect.left && clickX <= rect.right &&
+                clickY >= rect.top && clickY <= rect.bottom) {
+              candidates.push({ el: parent, area: rect.width * rect.height });
+            }
+          }
+        }
+        
+        // Select the smallest element that contains the click
+        if (candidates.length > 0) {
+          candidates.sort((a, b) => a.area - b.area);
+          element = candidates[0].el;
+        }
+      }
+      
       sendBounds(element, 'select');
     }
     
@@ -211,19 +317,119 @@ const INJECTION_SCRIPT = `
       }
     } else if (e.data.type === 'dom-selector-modify-text') {
       // Modifier le texte d'un élément
-      const { selector, text } = e.data;
-      const element = document.querySelector(selector);
+      const { selector, text, replaceMode = 'smart' } = e.data;
+      console.log('[DOMSelector] Attempting to modify text. Selector:', selector, 'New text:', text, 'Mode:', replaceMode);
+      
+      let element = document.querySelector(selector);
+      
+      // If element not found, try simpler selectors
+      if (!element) {
+        console.warn('[DOMSelector] Element not found with selector:', selector);
+        // Try without nth-of-type
+        const simplifiedSelector = selector.replace(/:nth-of-type\\(\\d+\\)/g, '');
+        element = document.querySelector(simplifiedSelector);
+        if (element) {
+          console.log('[DOMSelector] Found with simplified selector:', simplifiedSelector);
+        }
+      }
+      
       if (element) {
-        // Sauvegarder l'état précédent
-        modificationHistory.push({ selector, type: 'text', previous: element.textContent, new: text });
+        // Sauvegarder l'état précédent (innerHTML pour restaurer la structure)
+        const previousHTML = element.innerHTML;
+        const previousText = element.textContent;
+        modificationHistory.push({ selector, type: 'text', previous: previousHTML, previousText, new: text });
         
-        element.textContent = text;
-        console.log('[DOMSelector] Text modified:', selector);
+        // Smart text replacement - handle different cases
+        const hasChildElements = element.children.length > 0;
+        const hasOnlyTextNodes = !hasChildElements;
+        
+        console.log('[DOMSelector] Element analysis:', {
+          tagName: element.tagName,
+          hasChildElements,
+          childCount: element.children.length,
+          innerHTML: element.innerHTML.substring(0, 100)
+        });
+        
+        if (hasOnlyTextNodes || replaceMode === 'full') {
+          // Case 1: Simple element with only text content - replace directly
+          element.textContent = text;
+          console.log('[DOMSelector] Case 1: Simple replacement');
+        } else {
+          // Case 2: Element has child elements - be smarter about replacement
+          // Find all direct text nodes
+          const textNodes = [];
+          for (let i = 0; i < element.childNodes.length; i++) {
+            const node = element.childNodes[i];
+            if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
+              textNodes.push(node);
+            }
+          }
+          
+          console.log('[DOMSelector] Found direct text nodes:', textNodes.length);
+          
+          if (textNodes.length === 0) {
+            // No direct text nodes - element might be a container like <div> with only child elements
+            // Check if we should modify the first child with text instead
+            const firstTextChild = element.querySelector('*');
+            if (firstTextChild && firstTextChild.children.length === 0) {
+              firstTextChild.textContent = text;
+              console.log('[DOMSelector] Case 2a: Modified first text child');
+            } else {
+              // Fall back to replacing all content
+              element.textContent = text;
+              console.log('[DOMSelector] Case 2b: Full replacement (no better option)');
+            }
+          } else if (textNodes.length === 1) {
+            // Single text node - replace just that text
+            textNodes[0].textContent = text;
+            console.log('[DOMSelector] Case 3: Single text node replacement');
+          } else {
+            // Multiple text nodes - this is complex content like "text <a>link</a> more text"
+            // Determine what the user probably wants:
+            // If new text is shorter/similar to first text node, replace first
+            // If new text is much longer, it might be intended to replace all
+            
+            const firstTextContent = textNodes[0].textContent?.trim() || '';
+            
+            // Check if new text seems to be editing just the first text portion
+            if (text.length <= firstTextContent.length * 2 || 
+                text.startsWith(firstTextContent.substring(0, 3)) ||
+                firstTextContent.startsWith(text.substring(0, 3))) {
+              // Likely editing just the first text portion
+              textNodes[0].textContent = text;
+              console.log('[DOMSelector] Case 4a: Replaced first text node');
+            } else {
+              // User probably wants to replace all text content
+              // Preserve structure by replacing text nodes proportionally or with new text
+              // For now, set all to empty and set first to new text
+              textNodes.forEach((node, i) => {
+                if (i === 0) {
+                  node.textContent = text;
+                } else {
+                  node.textContent = '';
+                }
+              });
+              console.log('[DOMSelector] Case 4b: Replaced all text nodes');
+            }
+          }
+        }
+        
+        console.log('[DOMSelector] Text modified successfully:', selector, 'to:', text);
         
         window.parent.postMessage({ 
           type: 'dom-selector-text-applied', 
           selector, 
-          text 
+          text,
+          success: true
+        }, '*');
+      } else {
+        console.error('[DOMSelector] Element not found for selector:', selector);
+        window.parent.postMessage({ 
+          type: 'dom-selector-text-applied', 
+          selector, 
+          text,
+          success: false,
+          error: 'Element not found'
         }, '*');
       }
     } else if (e.data.type === 'dom-selector-undo') {
@@ -237,7 +443,8 @@ const INJECTION_SCRIPT = `
               element.style[key] = value;
             }
           } else if (last.type === 'text') {
-            element.textContent = last.previous;
+            // Restore innerHTML to get back original structure
+            element.innerHTML = last.previous;
           }
           console.log('[DOMSelector] Undo applied');
           window.parent.postMessage({ type: 'dom-selector-undo-applied' }, '*');

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -68,6 +68,11 @@ export interface ElementData {
   id?: string;
   className?: string;
   textContent?: string;
+  fullTextContent?: string;
+  directTextContent?: string;
+  hasChildren?: boolean;
+  childCount?: number;
+  isComplexText?: boolean;
   styles: ElementStyles;
   attributes?: Record<string, string>;
 }
@@ -112,13 +117,21 @@ export function ElementEditor({
   const [localText, setLocalText] = useState('');
   const [copied, setCopied] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const textDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSelectorRef = useRef<string>('');
 
   // Sync local state with element
   useEffect(() => {
     if (element) {
       setLocalStyles(element.styles || {});
-      setLocalText(element.textContent || '');
+      // For complex elements (with children), prefer direct text content
+      // This avoids showing all nested text which would be confusing
+      const textToEdit = element.isComplexText && element.directTextContent 
+        ? element.directTextContent 
+        : (element.textContent || '');
+      setLocalText(textToEdit);
       setHasChanges(false);
+      lastSelectorRef.current = element.selector;
     }
   }, [element]);
 
@@ -138,7 +151,18 @@ export function ElementEditor({
     
     setLocalText(text);
     setHasChanges(true);
-    onTextChange(element.selector, text);
+    
+    // Debounce the actual update to iframe - wait 300ms after typing stops
+    if (textDebounceRef.current) {
+      clearTimeout(textDebounceRef.current);
+    }
+    
+    textDebounceRef.current = setTimeout(() => {
+      // Use stored selector in case element reference changed
+      const selector = lastSelectorRef.current || element.selector;
+      console.log('[ElementEditor] Applying text change:', selector, text);
+      onTextChange(selector, text);
+    }, 300);
   }, [element, onTextChange]);
 
   const handleApplyToCode = useCallback(() => {
@@ -210,9 +234,9 @@ export function ElementEditor({
   }
 
   return (
-    <div className={cn("flex flex-col h-full bg-zinc-900", className)}>
+    <div className={cn("flex flex-col h-full max-h-screen bg-zinc-900", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs font-mono text-blue-400 truncate">
             &lt;{element.tagName}&gt;
@@ -248,8 +272,8 @@ export function ElementEditor({
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="styles" className="flex-1 flex flex-col">
-        <TabsList className="w-full justify-start rounded-none border-b border-zinc-800 bg-transparent h-9">
+      <Tabs defaultValue="styles" className="flex-1 flex flex-col min-h-0">
+        <TabsList className="w-full justify-start rounded-none border-b border-zinc-800 bg-transparent h-9 shrink-0">
           <TabsTrigger value="styles" className="text-xs data-[state=active]:bg-zinc-800">
             <PaintbrushIcon className="size-3 mr-1" />
             Styles
@@ -268,7 +292,7 @@ export function ElementEditor({
           </TabsTrigger>
         </TabsList>
 
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {/* Styles Tab */}
           <TabsContent value="styles" className="m-0 p-3 space-y-4">
             {/* Colors */}
@@ -581,12 +605,57 @@ export function ElementEditor({
             {/* Text Content */}
             <div className="space-y-2">
               <Label className="text-xs text-zinc-400">Text Content</Label>
+              
+              {/* Warning for complex elements */}
+              {element.isComplexText && (
+                <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-md text-xs text-amber-300">
+                  <p className="font-medium">⚠️ Complex element</p>
+                  <p className="opacity-80 mt-1">
+                    This element contains {element.childCount} child element(s). 
+                    Text changes will only affect direct text content, not nested elements.
+                  </p>
+                </div>
+              )}
+              
+              {/* Show different text representations */}
+              {element.isComplexText && element.directTextContent && (
+                <div className="space-y-1">
+                  <span className="text-[10px] text-zinc-500">Direct text only:</span>
+                  <div className="p-2 bg-zinc-800/50 rounded text-xs font-mono text-zinc-300 max-h-16 overflow-auto">
+                    {element.directTextContent || '(no direct text)'}
+                  </div>
+                </div>
+              )}
+              
               <textarea
                 value={localText}
-                onChange={(e) => handleTextChange(e.target.value)}
+                onChange={(e) => {
+                  setLocalText(e.target.value);
+                  setHasChanges(true);
+                }}
+                onBlur={() => {
+                  // Apply on blur (when user clicks away)
+                  if (element && localText !== element.textContent) {
+                    console.log('[ElementEditor] Applying text on blur:', element.selector);
+                    onTextChange(element.selector, localText);
+                  }
+                }}
                 placeholder="Enter text..."
                 className="w-full h-20 p-2 text-xs font-mono bg-zinc-800 border border-zinc-700 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (element) {
+                    console.log('[ElementEditor] Manual apply text:', element.selector, localText);
+                    onTextChange(element.selector, localText);
+                  }
+                }}
+                className="w-full h-7 text-xs"
+              >
+                Apply Text Change
+              </Button>
             </div>
 
             <Separator className="bg-zinc-800" />
@@ -733,7 +802,7 @@ export function ElementEditor({
               </div>
             </div>
           </TabsContent>
-        </ScrollArea>
+        </div>
       </Tabs>
     </div>
   );

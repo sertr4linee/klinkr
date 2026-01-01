@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false,
+  // Disable Turbopack, use Webpack instead
+  bundler: 'webpack',
   // Permettre les connexions WebSocket locales
   async headers() {
     return [
