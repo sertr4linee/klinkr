@@ -20,9 +20,20 @@ import {
   AlertCircleIcon,
   SaveIcon,
   MoveIcon,
-  GridIcon
+  GridIcon,
+  PaletteIcon,
+  ChevronDownIcon
 } from 'lucide-react';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { TAILWIND_COLORS, SPECIAL_COLORS } from '@/lib/tailwind-colors';
 import { cssToTailwind, mergeClasses, type FullConversionResult } from '@/lib/css-to-tailwind';
 import { PositionModeSelector, PositionControls, DraggablePreview } from '@/components/position-editor';
 import { 
@@ -110,6 +121,35 @@ const colorPresets = [
   '#ffffff', '#000000', '#ef4444', '#f97316', '#eab308', 
   '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280'
 ];
+
+/**
+ * Normalize color values for comparison (rgb -> hex)
+ */
+function normalizeColorForComparison(color: string | undefined): string {
+  if (!color) return '';
+  
+  const normalized = color.trim().toLowerCase();
+  
+  // Already hex
+  if (normalized.startsWith('#')) {
+    // Convert #rgb to #rrggbb
+    if (normalized.length === 4) {
+      return `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`;
+    }
+    return normalized;
+  }
+  
+  // rgb/rgba
+  const rgbMatch = normalized.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (rgbMatch) {
+    const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
+    const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
+    const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0');
+    return `#${r}${g}${b}`;
+  }
+  
+  return normalized;
+}
 
 // Common values
 const displayOptions = ['block', 'flex', 'grid', 'inline', 'inline-block', 'none'];
@@ -242,6 +282,8 @@ export function ElementEditor({
     setLocalStyles(newStyles);
     setHasChanges(true);
     
+    console.log(`[ElementEditor] handleStyleChange: ${key} = ${value}`);
+    
     // Apply live to preview
     onStyleChange(element.selector, { [key]: value });
   }, [element, localStyles, onStyleChange]);
@@ -276,8 +318,21 @@ export function ElementEditor({
     // Compare styles with ORIGINAL values (not current element which might have been updated)
     const styleChanges: Partial<ElementStyles> = {};
     for (const [key, value] of Object.entries(localStyles)) {
-      if (value !== originalStylesRef.current[key as keyof ElementStyles]) {
-        styleChanges[key as keyof ElementStyles] = value;
+      const originalValue = originalStylesRef.current[key as keyof ElementStyles];
+      
+      // Special comparison for color properties (normalize rgb vs hex)
+      if (key === 'color' || key === 'backgroundColor' || key === 'borderColor') {
+        const normalizedNew = normalizeColorForComparison(value);
+        const normalizedOriginal = normalizeColorForComparison(originalValue);
+        if (normalizedNew !== normalizedOriginal) {
+          styleChanges[key as keyof ElementStyles] = value;
+          console.log(`[ElementEditor] Color change detected: ${key} "${originalValue}" (${normalizedOriginal}) -> "${value}" (${normalizedNew})`);
+        }
+      } else {
+        // Normal comparison for non-color properties
+        if (value !== originalValue) {
+          styleChanges[key as keyof ElementStyles] = value;
+        }
       }
     }
     
@@ -287,7 +342,14 @@ export function ElementEditor({
     // If saving as Tailwind, convert styles to classes
     if (saveAsTailwind && Object.keys(styleChanges).length > 0) {
       // Convert changed styles to Tailwind classes
+      console.log('[ElementEditor] Converting styles to Tailwind:', styleChanges);
       const conversionResult = cssToTailwind(styleChanges as Record<string, string>);
+      console.log('[ElementEditor] Conversion result:', {
+        classes: conversionResult.classes,
+        conversions: conversionResult.conversions,
+        unconverted: conversionResult.unconverted
+      });
+      
       if (conversionResult.classes.length > 0) {
         allTailwindClasses.push(...conversionResult.classes);
         
@@ -322,12 +384,11 @@ export function ElementEditor({
       }
     }
     
-    // Merge all Tailwind classes with existing
+    // Send the new Tailwind classes to add/merge (backend will handle the merge)
     if (allTailwindClasses.length > 0) {
-      const newClasses = element.className 
-        ? mergeClasses(element.className, allTailwindClasses.join(' '))
-        : allTailwindClasses.join(' ');
-      changes.className = newClasses;
+      // Send new classes to add - backend will merge with existing source classes
+      (changes as Record<string, unknown>).tailwindClassesToAdd = allTailwindClasses;
+      console.log('[ElementEditor] Tailwind classes to add:', allTailwindClasses);
     }
     
     // Compare text with ORIGINAL value
@@ -335,16 +396,14 @@ export function ElementEditor({
       changes.textContent = localText;
     }
     
-    console.log('[ElementEditor] Applying to code:', { 
-      selector: element.selector, 
-      changes,
-      saveAsTailwind,
-      hasPositionChanges,
-      positionValues,
-      localText,
-      originalText: originalTextRef.current,
-      hasTextChange: localText !== originalTextRef.current
-    });
+    console.log('[ElementEditor] ===== APPLYING TO CODE =====');
+    console.log('[ElementEditor] Selector:', element.selector);
+    console.log('[ElementEditor] Style changes detected:', styleChanges);
+    console.log('[ElementEditor] All Tailwind classes to add:', allTailwindClasses);
+    console.log('[ElementEditor] Final changes object:', JSON.stringify(changes, null, 2));
+    console.log('[ElementEditor] Has position changes:', hasPositionChanges);
+    console.log('[ElementEditor] Save as Tailwind:', saveAsTailwind);
+    console.log('[ElementEditor] ===============================');
     
     if (Object.keys(changes).length > 0) {
       setIsSaving(true);
@@ -465,31 +524,83 @@ export function ElementEditor({
             {/* Colors */}
             <div className="space-y-2">
               <Label className="text-xs text-zinc-400">Background Color</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="color"
-                  value={localStyles.backgroundColor || '#000000'}
-                  onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
-                  className="w-10 h-8 p-0 border-0"
-                />
-                <Input
-                  type="text"
-                  value={localStyles.backgroundColor || ''}
-                  onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
-                  placeholder="transparent"
-                  className="flex-1 h-8 text-xs font-mono"
-                />
-              </div>
-              <div className="flex gap-1">
-                {colorPresets.map(color => (
-                  <button
-                    key={color}
-                    onClick={() => handleStyleChange('backgroundColor', color)}
-                    className="size-5 rounded border border-zinc-700 hover:scale-110 transition-transform"
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="w-full flex items-center justify-between h-10 px-3 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="size-5 rounded border border-zinc-600"
+                        style={{ backgroundColor: localStyles.backgroundColor || 'transparent' }}
+                      />
+                      <span className="text-xs text-zinc-300 font-mono">
+                        {localStyles.backgroundColor || 'Select color'}
+                      </span>
+                    </div>
+                    <PaletteIcon className="size-4 text-zinc-500" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-80 max-h-[500px] overflow-y-auto bg-zinc-900 border-zinc-800">
+                  <div className="sticky top-0 bg-zinc-900 border-b border-zinc-800 p-2">
+                    <Input
+                      type="text"
+                      value={localStyles.backgroundColor || ''}
+                      onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
+                      placeholder="#hex or rgb() or transparent"
+                      className="h-8 text-xs font-mono bg-zinc-800 border-zinc-700"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  
+                  <div className="p-2">
+                    <DropdownMenuLabel className="text-zinc-400 text-xs mb-2">Quick Colors</DropdownMenuLabel>
+                    <div className="grid grid-cols-8 gap-1.5 mb-3">
+                      {SPECIAL_COLORS.map((color) => (
+                        <button
+                          key={color.tailwindClass}
+                          onClick={() => handleStyleChange('backgroundColor', color.hex)}
+                          className="size-8 rounded border-2 border-zinc-700 hover:border-blue-500 hover:scale-110 transition-all"
+                          style={{ backgroundColor: color.hex }}
+                          title={color.name}
+                        />
+                      ))}
+                      {colorPresets.map(color => (
+                        <button
+                          key={color}
+                          onClick={() => handleStyleChange('backgroundColor', color)}
+                          className="size-8 rounded border-2 border-zinc-700 hover:border-blue-500 hover:scale-110 transition-all"
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
+                    
+                    <DropdownMenuSeparator className="bg-zinc-800 my-2" />
+                    
+                    {TAILWIND_COLORS.map((colorFamily) => (
+                      <div key={colorFamily.name} className="mb-3">
+                        <DropdownMenuLabel className="text-zinc-500 text-[10px] uppercase font-semibold mb-1">
+                          {colorFamily.name}
+                        </DropdownMenuLabel>
+                        <div className="grid grid-cols-11 gap-1">
+                          {colorFamily.shades.map((shade) => (
+                            <button
+                              key={shade.tailwindClass}
+                              onClick={() => handleStyleChange('backgroundColor', shade.hex)}
+                              className={cn(
+                                "size-6 rounded transition-all hover:scale-125 hover:z-10",
+                                localStyles.backgroundColor === shade.hex
+                                  ? "ring-2 ring-blue-500 ring-offset-1 ring-offset-zinc-900"
+                                  : "border border-zinc-700 hover:border-blue-500"
+                              )}
+                              style={{ backgroundColor: shade.hex }}
+                              title={`${colorFamily.name} ${shade.value}`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             <Separator className="bg-zinc-800" />
@@ -497,48 +608,137 @@ export function ElementEditor({
             {/* Text Color */}
             <div className="space-y-2">
               <Label className="text-xs text-zinc-400">Text Color</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="color"
-                  value={localStyles.color || '#ffffff'}
-                  onChange={(e) => handleStyleChange('color', e.target.value)}
-                  className="w-10 h-8 p-0 border-0"
-                />
-                <Input
-                  type="text"
-                  value={localStyles.color || ''}
-                  onChange={(e) => handleStyleChange('color', e.target.value)}
-                  placeholder="inherit"
-                  className="flex-1 h-8 text-xs font-mono"
-                />
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="w-full flex items-center justify-between h-10 px-3 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="size-5 rounded border border-zinc-600"
+                        style={{ backgroundColor: localStyles.color || 'transparent' }}
+                      />
+                      <span className="text-xs text-zinc-300 font-mono">
+                        {localStyles.color || 'Select color'}
+                      </span>
+                    </div>
+                    <PaletteIcon className="size-4 text-zinc-500" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-80 max-h-[500px] overflow-y-auto bg-zinc-900 border-zinc-800">
+                  <div className="sticky top-0 bg-zinc-900 border-b border-zinc-800 p-2">
+                    <Input
+                      type="text"
+                      value={localStyles.color || ''}
+                      onChange={(e) => handleStyleChange('color', e.target.value)}
+                      placeholder="#hex or rgb() or inherit"
+                      className="h-8 text-xs font-mono bg-zinc-800 border-zinc-700"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  
+                  <div className="p-2">
+                    <DropdownMenuLabel className="text-zinc-400 text-xs mb-2">Quick Colors</DropdownMenuLabel>
+                    <div className="grid grid-cols-8 gap-1.5 mb-3">
+                      {SPECIAL_COLORS.map((color) => (
+                        <button
+                          key={color.tailwindClass}
+                          onClick={() => handleStyleChange('color', color.hex)}
+                          className="size-8 rounded border-2 border-zinc-700 hover:border-blue-500 hover:scale-110 transition-all"
+                          style={{ backgroundColor: color.hex }}
+                          title={color.name}
+                        />
+                      ))}
+                      {colorPresets.map(color => (
+                        <button
+                          key={color}
+                          onClick={() => handleStyleChange('color', color)}
+                          className="size-8 rounded border-2 border-zinc-700 hover:border-blue-500 hover:scale-110 transition-all"
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
+                    
+                    <DropdownMenuSeparator className="bg-zinc-800 my-2" />
+                    
+                    {TAILWIND_COLORS.map((colorFamily) => (
+                      <div key={colorFamily.name} className="mb-3">
+                        <DropdownMenuLabel className="text-zinc-500 text-[10px] uppercase font-semibold mb-1">
+                          {colorFamily.name}
+                        </DropdownMenuLabel>
+                        <div className="grid grid-cols-11 gap-1">
+                          {colorFamily.shades.map((shade) => (
+                            <button
+                              key={shade.tailwindClass}
+                              onClick={() => handleStyleChange('color', shade.hex)}
+                              className={cn(
+                                "size-6 rounded transition-all hover:scale-125 hover:z-10",
+                                localStyles.color === shade.hex
+                                  ? "ring-2 ring-blue-500 ring-offset-1 ring-offset-zinc-900"
+                                  : "border border-zinc-700 hover:border-blue-500"
+                              )}
+                              style={{ backgroundColor: shade.hex }}
+                              title={`${colorFamily.name} ${shade.value}`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             <Separator className="bg-zinc-800" />
 
             {/* Border Radius */}
             <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Border Radius</Label>
-              <Input
-                type="text"
-                value={localStyles.borderRadius || ''}
-                onChange={(e) => handleStyleChange('borderRadius', e.target.value)}
-                placeholder="0px"
-                className="h-8 text-xs font-mono"
-              />
-              <div className="flex gap-1">
-                {['0', '4px', '8px', '12px', '16px', '9999px'].map(value => (
-                  <Button
-                    key={value}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleStyleChange('borderRadius', value)}
-                    className="h-6 px-2 text-xs"
-                  >
-                    {value}
-                  </Button>
-                ))}
-              </div>
+              <Label className="text-xs text-zinc-400">Radius</Label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="w-full flex items-center justify-between h-10 px-3 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <div className="size-5 rounded-md border border-zinc-600" style={{ borderRadius: localStyles.borderRadius || '0' }} />
+                      <span className="text-xs text-zinc-300">
+                        {localStyles.borderRadius === '0' || localStyles.borderRadius === '0px' ? 'None' :
+                         localStyles.borderRadius === '2px' ? 'Extra Small' :
+                         localStyles.borderRadius === '4px' ? 'Small' :
+                         localStyles.borderRadius === '8px' ? 'Medium' :
+                         localStyles.borderRadius === '12px' || localStyles.borderRadius === '0.75rem' ? 'Large' :
+                         localStyles.borderRadius === '16px' || localStyles.borderRadius === '1rem' ? 'Extra Large' :
+                         localStyles.borderRadius === '24px' || localStyles.borderRadius === '1.5rem' ? 'Double Extra Large' :
+                         localStyles.borderRadius === '32px' || localStyles.borderRadius === '2rem' ? 'Triple Extra Large' :
+                         localStyles.borderRadius === '48px' || localStyles.borderRadius === '3rem' ? 'Quadruple Extra Large' :
+                         localStyles.borderRadius === '9999px' || localStyles.borderRadius === '50%' ? 'Full' :
+                         localStyles.borderRadius || 'Select'}
+                      </span>
+                    </div>
+                    <ChevronDownIcon className="size-4 text-zinc-500" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-64 bg-zinc-900 border-zinc-800">
+                  {[
+                    { label: 'None', value: '0' },
+                    { label: 'Extra Small', value: '2px' },
+                    { label: 'Small', value: '4px' },
+                    { label: 'Medium', value: '8px' },
+                    { label: 'Large', value: '12px' },
+                    { label: 'Extra Large', value: '16px' },
+                    { label: 'Double Extra Large', value: '24px' },
+                    { label: 'Triple Extra Large', value: '32px' },
+                    { label: 'Quadruple Extra Large', value: '48px' },
+                    { label: 'Full', value: '9999px' },
+                  ].map(({ label, value }) => (
+                    <DropdownMenuItem
+                      key={value}
+                      onClick={() => handleStyleChange('borderRadius', value)}
+                      className="flex items-center gap-3 cursor-pointer py-2"
+                    >
+                      <div className="size-5 rounded border border-zinc-600 bg-zinc-800" style={{ borderRadius: value }} />
+                      <span className="text-xs flex-1">{label}</span>
+                      {localStyles.borderRadius === value && <CheckIcon className="size-4 text-blue-500" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             <Separator className="bg-zinc-800" />
@@ -577,17 +777,35 @@ export function ElementEditor({
 
             {/* Opacity */}
             <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Opacity</Label>
-              <Input
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-zinc-400">Opacity</Label>
+                <div className="flex items-center gap-2 px-3 h-8 rounded-md bg-zinc-800 border border-zinc-700">
+                  <div className="size-4 rounded-full" style={{ 
+                    background: `radial-gradient(circle, rgba(255,255,255,${localStyles.opacity || 1}) 0%, rgba(255,255,255,${(parseFloat(localStyles.opacity || '1') * 0.5).toFixed(2)}) 100%)` 
+                  }} />
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={Math.round((parseFloat(localStyles.opacity || '1')) * 100)}
+                    onChange={(e) => {
+                      const percentage = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+                      handleStyleChange('opacity', (percentage / 100).toString());
+                    }}
+                    className="h-6 w-12 px-1 text-xs text-right bg-transparent border-0 focus:ring-0"
+                  />
+                  <span className="text-xs text-zinc-500">%</span>
+                </div>
+              </div>
+              <input
                 type="range"
                 min="0"
-                max="1"
-                step="0.1"
-                value={localStyles.opacity || '1'}
-                onChange={(e) => handleStyleChange('opacity', e.target.value)}
-                className="h-8"
+                max="100"
+                step="5"
+                value={Math.round((parseFloat(localStyles.opacity || '1')) * 100)}
+                onChange={(e) => handleStyleChange('opacity', (parseInt(e.target.value) / 100).toString())}
+                className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
               />
-              <span className="text-xs text-zinc-500">{localStyles.opacity || '1'}</span>
             </div>
           </TabsContent>
 

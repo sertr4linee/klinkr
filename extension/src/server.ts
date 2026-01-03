@@ -1565,15 +1565,49 @@ export function DOMSelectorBridge() {
    * then modifies the styles/text in the source code
    */
   private async handleApplyElementChanges(ws: WebSocket, message: WebSocketMessage): Promise<void> {
-    const { selector, changes, url } = message.payload as {
-      selector: string;
-      changes: { styles?: Record<string, string>; textContent?: string; className?: string };
-      url: string;
-    };
-
-    console.log(`[Server] Applying element changes:`, { selector, changes, url });
-
+    console.log(`[Server] ========================================`);
+    console.log(`[Server] handleApplyElementChanges called`);
+    console.log(`[Server] Payload:`, JSON.stringify(message.payload, null, 2));
+    console.log(`[Server] ========================================`);
+    
     try {
+      const { selector, changes, url } = message.payload as {
+        selector: string;
+        changes: { 
+          styles?: Record<string, string>; 
+          textContent?: string; 
+          className?: string;
+          tailwindClassesToAdd?: string[];
+        };
+        url: string;
+      };
+
+      // Validation précoce des paramètres
+      if (!selector || !url) {
+        const errorPayload = { 
+          error: `Missing required parameters: selector=${!!selector}, url=${!!url}`, 
+          selector: selector || 'unknown' 
+        };
+        console.error('[Server] Missing required params:', errorPayload);
+        this.sendToClient(ws, {
+          type: 'elementChangesError',
+          payload: errorPayload
+        });
+        return;
+      }
+
+      if (!changes || Object.keys(changes).length === 0) {
+        const errorPayload = { error: 'No changes provided', selector };
+        console.error('[Server] No changes provided:', errorPayload);
+        this.sendToClient(ws, {
+          type: 'elementChangesError',
+          payload: errorPayload
+        });
+        return;
+      }
+
+      console.log(`[Server] Valid request - selector: "${selector}", changes keys:`, Object.keys(changes));
+
       // Try to find the source file based on the URL
       const sourceFile = await this.findSourceFileFromUrl(url);
       
@@ -1643,10 +1677,15 @@ export function DOMSelectorBridge() {
         });
       }
     } catch (error) {
-      console.error(`[Server] Error applying element changes:`, error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      console.error(`[Server] Error applying element changes:`, { error: errorMessage, stack: errorStack });
       this.sendToClient(ws, {
         type: 'elementChangesError',
-        payload: { error: String(error), selector }
+        payload: { 
+          error: errorMessage || 'Unknown error occurred',
+          selector: (message.payload as { selector?: string })?.selector || 'unknown'
+        }
       });
     }
   }
@@ -1909,12 +1948,16 @@ export function DOMSelectorBridge() {
     const nthMatch = lastPart.match(/:nth-of-type\((\d+)\)/);
     const nthIndex = nthMatch ? parseInt(nthMatch[1], 10) : 1; // Default to 1 (first element)
     
-    // Remove :nth-of-type() for class matching
+    // Remove :nth-of-type() for class matching (but NOT Tailwind variant prefixes like dark:)
     const cleanSelector = lastPart.replace(/:nth-of-type\(\d+\)/g, '');
     
     const tagMatch = cleanSelector.match(/^(\w+)/);
     const idMatch = cleanSelector.match(/#([\w-]+)/);
-    const classMatch = cleanSelector.match(/\.([\w-]+)/g);
+    
+    // Match classes including Tailwind variants like dark:text-white, hover:bg-red-500, etc.
+    // The pattern matches: . followed by any combination of word chars, hyphens, brackets, colons, slashes, percents
+    // Examples: .dark:text-zinc-400, .hover:bg-[#123], .text-[100%], .md:w-1/2
+    const classMatch = cleanSelector.match(/\.([\w:-]+(?:\[[^\]]+\])?[\w:-]*)/g);
     
     const targetTag = tagMatch?.[1]?.toLowerCase();
     const targetId = idMatch?.[1];
@@ -2112,13 +2155,47 @@ export function DOMSelectorBridge() {
             hasChanges = true;
           }
 
-          // Apply className changes (for Tailwind mode)
-          if (changes.className !== undefined) {
+          // Apply className changes - either direct className or merge tailwindClassesToAdd
+          const tailwindClassesToAdd = (changes as { tailwindClassesToAdd?: string[] }).tailwindClassesToAdd;
+          
+          if (tailwindClassesToAdd && tailwindClassesToAdd.length > 0) {
+            // Smart merge: add new Tailwind classes while replacing conflicting ones
             const classAttrIndex = attributes.findIndex((attr: t.JSXAttribute) => 
               t.isJSXIdentifier(attr.name) && attr.name.name === 'className'
             );
 
-            console.log(`[Server] AST: Applying className: ${changes.className}`);
+            console.log(`[Server] AST: Merging Tailwind classes:`, tailwindClassesToAdd);
+
+            if (classAttrIndex >= 0) {
+              const existingClassAttr = openingElement.attributes[classAttrIndex] as t.JSXAttribute;
+              
+              if (t.isStringLiteral(existingClassAttr.value)) {
+                // Merge classes intelligently
+                const existingClasses = existingClassAttr.value.value;
+                const mergedClasses = this.mergeClassesInBackend(existingClasses, tailwindClassesToAdd.join(' '));
+                existingClassAttr.value = t.stringLiteral(mergedClasses);
+                console.log(`[Server] AST: Merged className: "${existingClasses}" + "${tailwindClassesToAdd.join(' ')}" = "${mergedClasses}"`);
+              } else {
+                // Non-string className (dynamic), just append
+                console.log(`[Server] AST: Warning - dynamic className, cannot merge safely`);
+              }
+            } else {
+              // No existing className, add new one
+              const classAttr = t.jsxAttribute(
+                t.jsxIdentifier('className'),
+                t.stringLiteral(tailwindClassesToAdd.join(' '))
+              );
+              openingElement.attributes.push(classAttr);
+              console.log(`[Server] AST: Added new className: "${tailwindClassesToAdd.join(' ')}"`);
+            }
+            hasChanges = true;
+          } else if (changes.className !== undefined) {
+            // Direct className replacement (fallback)
+            const classAttrIndex = attributes.findIndex((attr: t.JSXAttribute) => 
+              t.isJSXIdentifier(attr.name) && attr.name.name === 'className'
+            );
+
+            console.log(`[Server] AST: Applying direct className: ${changes.className}`);
 
             if (classAttrIndex >= 0) {
               // Update existing className attribute
@@ -2198,6 +2275,135 @@ export function DOMSelectorBridge() {
       // Fallback: return null to indicate failure (don't corrupt the file)
       return null;
     }
+  }
+
+  /**
+   * Merge Tailwind classes intelligently
+   * Replaces classes from the same "group" instead of adding duplicates
+   * Also handles dark: variants - when changing a color, removes conflicting dark: variants
+   */
+  private mergeClassesInBackend(existingClasses: string, newClasses: string): string {
+    // Define class groups (mutually exclusive classes)
+    const classGroups: Record<string, RegExp> = {
+      // Colors (including arbitrary values like text-[#ff0000])
+      textColor: /^text-(\[.+?\]|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(-\d+)?)$/,
+      bgColor: /^bg-(\[.+?\]|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black|transparent)(-\d+)?)$/,
+      borderColor: /^border-(\[.+?\]|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black|transparent)(-\d+)?)$/,
+      
+      // Dark mode variants for colors
+      darkTextColor: /^dark:text-(\[.+?\]|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(-\d+)?)$/,
+      darkBgColor: /^dark:bg-(\[.+?\]|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black|transparent)(-\d+)?)$/,
+      darkBorderColor: /^dark:border-(\[.+?\]|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black|transparent)(-\d+)?)$/,
+      
+      // Typography
+      fontSize: /^text-(xs|sm|base|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl|8xl|9xl)$/,
+      fontWeight: /^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/,
+      textAlign: /^text-(left|center|right|justify|start|end)$/,
+      
+      // Spacing
+      padding: /^p-/,
+      paddingX: /^px-/,
+      paddingY: /^py-/,
+      paddingTop: /^pt-/,
+      paddingRight: /^pr-/,
+      paddingBottom: /^pb-/,
+      paddingLeft: /^pl-/,
+      margin: /^m-/,
+      marginX: /^mx-/,
+      marginY: /^my-/,
+      marginTop: /^mt-/,
+      marginRight: /^mr-/,
+      marginBottom: /^mb-/,
+      marginLeft: /^ml-/,
+      
+      // Sizing
+      width: /^w-/,
+      height: /^h-/,
+      
+      // Layout
+      display: /^(block|inline-block|inline|flex|inline-flex|grid|inline-grid|hidden|contents)$/,
+      position: /^(static|relative|absolute|fixed|sticky)$/,
+      
+      // Flexbox
+      flexDirection: /^flex-(row|row-reverse|col|col-reverse)$/,
+      justifyContent: /^justify-/,
+      alignItems: /^items-/,
+      gap: /^gap-/,
+      
+      // Border
+      borderRadius: /^rounded-/,
+      
+      // Effects
+      shadow: /^shadow-/,
+      opacity: /^opacity-/,
+    };
+
+    // Map base groups to their dark variants (to remove dark: when changing base color)
+    const groupToDarkVariant: Record<string, string> = {
+      textColor: 'darkTextColor',
+      bgColor: 'darkBgColor',
+      borderColor: 'darkBorderColor',
+    };
+
+    const getClassGroup = (cls: string): string | null => {
+      for (const [group, pattern] of Object.entries(classGroups)) {
+        if (pattern.test(cls)) {
+          return group;
+        }
+      }
+      return null;
+    };
+
+    const existing = existingClasses.split(/\s+/).filter(Boolean);
+    const newOnes = newClasses.split(/\s+/).filter(Boolean);
+    
+    // Map existing classes by group
+    const existingByGroup = new Map<string, string[]>();
+    const ungroupedExisting: string[] = [];
+    
+    for (const cls of existing) {
+      const group = getClassGroup(cls);
+      if (group) {
+        if (!existingByGroup.has(group)) {
+          existingByGroup.set(group, []);
+        }
+        existingByGroup.get(group)!.push(cls);
+      } else {
+        ungroupedExisting.push(cls);
+      }
+    }
+    
+    // Build result: ungrouped + new classes (replacing same-group existing)
+    const result = [...ungroupedExisting];
+    const usedGroups = new Set<string>();
+    
+    // Add all new classes first
+    for (const cls of newOnes) {
+      const group = getClassGroup(cls);
+      if (group) {
+        usedGroups.add(group);
+        // Also mark the dark variant as used (to remove dark:text-* when changing text-*)
+        const darkVariant = groupToDarkVariant[group];
+        if (darkVariant) {
+          usedGroups.add(darkVariant);
+          console.log(`[Server] mergeClasses: Adding ${cls} (${group}), also removing ${darkVariant} variants`);
+        }
+        result.push(cls);
+      } else if (!result.includes(cls)) {
+        result.push(cls);
+      }
+    }
+    
+    // Re-add grouped existing classes that weren't replaced
+    for (const [group, classes] of existingByGroup.entries()) {
+      if (!usedGroups.has(group)) {
+        result.push(...classes);
+      } else {
+        console.log(`[Server] mergeClasses: Removing existing ${group} classes: ${classes.join(', ')}`);
+      }
+    }
+    
+    return result.join(' ');
   }
 
   /**

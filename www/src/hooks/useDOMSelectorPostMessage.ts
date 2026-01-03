@@ -81,7 +81,8 @@ const INJECTION_SCRIPT = `
       let selector = current.tagName.toLowerCase();
       
       if (current.className && typeof current.className === 'string') {
-        const classes = current.className.trim().split(/\\s+/).filter(c => c && !c.startsWith('hover')).slice(0, 2);
+        // Take up to 5 classes for better matching, filter out hover/focus states that might change
+        const classes = current.className.trim().split(/\\s+/).filter(c => c && !c.startsWith('hover:') && !c.startsWith('focus:')).slice(0, 5);
         if (classes.length) selector += '.' + classes.join('.');
       }
       

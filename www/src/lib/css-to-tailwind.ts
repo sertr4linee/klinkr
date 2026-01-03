@@ -552,6 +552,80 @@ export function stylesToTailwindString(styles: Record<string, string>): string {
 }
 
 /**
+ * Groupes de classes Tailwind qui sont mutuellement exclusives
+ */
+const classGroups: Record<string, RegExp> = {
+  // Colors (including arbitrary values like text-[#ff0000])
+  textColor: /^text-(\[.+?\]|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(-\d+)?)$/,
+  bgColor: /^bg-(\[.+?\]|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black|transparent)(-\d+)?)$/,
+  borderColor: /^border-(\[.+?\]|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black|transparent)(-\d+)?)$/,
+  
+  // Typography
+  fontSize: /^text-(xs|sm|base|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl|8xl|9xl)$/,
+  fontWeight: /^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/,
+  textAlign: /^text-(left|center|right|justify|start|end)$/,
+  lineHeight: /^leading-/,
+  fontFamily: /^font-(sans|serif|mono)$/,
+  
+  // Spacing
+  padding: /^p-/,
+  paddingX: /^px-/,
+  paddingY: /^py-/,
+  paddingTop: /^pt-/,
+  paddingRight: /^pr-/,
+  paddingBottom: /^pb-/,
+  paddingLeft: /^pl-/,
+  margin: /^m-/,
+  marginX: /^mx-/,
+  marginY: /^my-/,
+  marginTop: /^mt-/,
+  marginRight: /^mr-/,
+  marginBottom: /^mb-/,
+  marginLeft: /^ml-/,
+  
+  // Sizing
+  width: /^w-/,
+  height: /^h-/,
+  minWidth: /^min-w-/,
+  maxWidth: /^max-w-/,
+  minHeight: /^min-h-/,
+  maxHeight: /^max-h-/,
+  
+  // Layout
+  display: /^(block|inline-block|inline|flex|inline-flex|grid|inline-grid|hidden|contents)$/,
+  position: /^(static|relative|absolute|fixed|sticky)$/,
+  overflow: /^overflow-/,
+  
+  // Flexbox
+  flexDirection: /^flex-(row|row-reverse|col|col-reverse)$/,
+  flexWrap: /^flex-(wrap|wrap-reverse|nowrap)$/,
+  justifyContent: /^justify-/,
+  alignItems: /^items-/,
+  alignSelf: /^self-/,
+  gap: /^gap-/,
+  
+  // Border
+  borderRadius: /^rounded-/,
+  borderWidth: /^border-/,
+  
+  // Effects
+  shadow: /^shadow-/,
+  opacity: /^opacity-/,
+};
+
+/**
+ * Détermine le groupe d'une classe Tailwind
+ */
+function getClassGroup(cls: string): string | null {
+  for (const [group, pattern] of Object.entries(classGroups)) {
+    if (pattern.test(cls)) {
+      return group;
+    }
+  }
+  return null;
+}
+
+/**
  * Merge des classes existantes avec les nouvelles classes Tailwind
  * en évitant les doublons et conflits
  */
@@ -559,38 +633,44 @@ export function mergeClasses(existingClasses: string, newClasses: string): strin
   const existing = existingClasses.split(/\s+/).filter(Boolean);
   const newOnes = newClasses.split(/\s+/).filter(Boolean);
   
-  // Extraire les préfixes pour détecter les conflits (ex: bg-, text-, p-, etc.)
-  const getPrefix = (cls: string): string => {
-    // Handle arbitrary values
-    if (cls.includes('[')) {
-      return cls.split('[')[0];
-    }
-    // Handle normal classes
-    const parts = cls.split('-');
-    if (parts.length === 1) return cls;
-    // Pour les classes comme "text-center", "text-xl", "text-red-500"
-    return parts.slice(0, -1).join('-') + '-';
-  };
+  // Map des groupes existants vers leurs classes (peut avoir plusieurs classes par groupe)
+  const existingGroups = new Map<string, string[]>();
+  const ungroupedExisting: string[] = [];
   
-  const existingPrefixes = new Map<string, string>();
   for (const cls of existing) {
-    existingPrefixes.set(getPrefix(cls), cls);
+    const group = getClassGroup(cls);
+    if (group) {
+      if (!existingGroups.has(group)) {
+        existingGroups.set(group, []);
+      }
+      existingGroups.get(group)!.push(cls);
+    } else {
+      ungroupedExisting.push(cls);
+    }
   }
   
-  // Ajouter les nouvelles classes, en remplaçant les conflits
-  const result = [...existing];
+  // Construire le résultat : classes non groupées + nouvelles classes (qui remplacent les anciennes du même groupe)
+  const result = [...ungroupedExisting];
+  const usedGroups = new Set<string>();
+  
+  // D'abord, ajouter toutes les nouvelles classes
   for (const cls of newOnes) {
-    const prefix = getPrefix(cls);
-    const existingClass = existingPrefixes.get(prefix);
-    
-    if (existingClass) {
-      // Remplacer la classe existante
-      const idx = result.indexOf(existingClass);
-      if (idx !== -1) {
-        result[idx] = cls;
-      }
-    } else {
+    const group = getClassGroup(cls);
+    if (group) {
+      usedGroups.add(group);
       result.push(cls);
+    } else {
+      // Si pas de groupe, ajouter directement (éviter les doublons)
+      if (!result.includes(cls)) {
+        result.push(cls);
+      }
+    }
+  }
+  
+  // Ensuite, réintégrer les classes existantes groupées qui n'ont pas été remplacées
+  for (const [group, classes] of existingGroups.entries()) {
+    if (!usedGroups.has(group)) {
+      result.push(...classes);
     }
   }
   

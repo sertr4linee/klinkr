@@ -348,14 +348,21 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
               break;
               
             case 'elementChangesError':
-              console.error('[Bridge] Element changes error:', message.payload);
-              setError(message.payload?.error ?? 'Failed to apply changes');
+              const errorMsg = message.payload?.error ?? 'Failed to apply changes';
+              const errorDetails = message.payload?.selector ? ` (selector: ${message.payload.selector})` : '';
+              console.error('[Bridge] Element changes error:', {
+                error: errorMsg,
+                selector: message.payload?.selector,
+                file: message.payload?.file,
+                fullPayload: message.payload
+              });
+              setError(`${errorMsg}${errorDetails}`);
               setActivities(prev => [{
                 id: `error-${Date.now()}`,
                 type: 'diagnostic' as ActivityType,
                 timestamp: Date.now(),
                 data: {
-                  message: message.payload?.error || 'Could not apply changes',
+                  message: errorMsg + errorDetails,
                   severity: 'error' as const
                 }
               }, ...prev].slice(0, 50));
@@ -670,12 +677,17 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
       return;
     }
 
-    console.log('[applyElementChanges] Applying changes:', { selector, changes, url });
-    
-    wsRef.current.send(JSON.stringify({
+    const message = {
       type: 'applyElementChanges',
       payload: { selector, changes, url }
-    }));
+    };
+
+    console.log('[applyElementChanges] ========================================');
+    console.log('[applyElementChanges] Sending message:', JSON.stringify(message, null, 2));
+    console.log('[applyElementChanges] Changes keys:', Object.keys(changes));
+    console.log('[applyElementChanges] ========================================');
+    
+    wsRef.current.send(JSON.stringify(message));
   }, []);
 
   return {
