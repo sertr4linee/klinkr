@@ -8,6 +8,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { ModelBridge } from './modelBridge';
 import { ChatParticipantBridge } from './chatParticipant';
 import { ActivityTracker } from './activityTracker';
+import { CopilotHistoryService } from './copilotHistory';
 import { WebSocketMessage, ChangeModelPayload, WorkspaceInfo, FileTreeItem, NextJsProject } from './types';
 
 // REALM Protocol imports
@@ -31,6 +32,7 @@ export class AppBuilderServer {
   private clients: Set<WebSocket> = new Set();
   private modelBridge: ModelBridge;
   private activityTracker: ActivityTracker;
+  private copilotHistoryService: CopilotHistoryService;
   private port: number;
   private nextJsProjects: Map<string, NextJsProject> = new Map();
   private nextJsProcesses: Map<string, ChildProcess> = new Map();
@@ -40,10 +42,11 @@ export class AppBuilderServer {
   private realmEventBus: EventBus;
   private wsClientMap: Map<WebSocket, string> = new Map(); // ws -> clientId
 
-  constructor(port: number) {
+  constructor(port: number, private context: vscode.ExtensionContext) {
     this.port = port;
     this.modelBridge = ModelBridge.getInstance();
     this.activityTracker = ActivityTracker.getInstance();
+    this.copilotHistoryService = CopilotHistoryService.getInstance(context);
     this.syncEngine = SyncEngine.getInstance();
     this.realmEventBus = EventBus.getInstance();
     this.app = express();
@@ -333,6 +336,22 @@ export class AppBuilderServer {
 
       case 'detectMCPServers':
         await this.detectAndSendMCPServers(ws);
+        break;
+
+      case 'getCopilotHistory':
+        await this.handleGetCopilotHistory(ws);
+        break;
+
+      case 'getCopilotHistoryConfig':
+        await this.handleGetCopilotHistoryConfig(ws);
+        break;
+
+      case 'updateCopilotHistoryConfig':
+        await this.handleUpdateCopilotHistoryConfig(ws, message.payload);
+        break;
+
+      case 'getAvailableCopilotVersions':
+        await this.handleGetAvailableCopilotVersions(ws);
         break;
 
       case 'setupDOMBridge':
