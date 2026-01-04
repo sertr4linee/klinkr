@@ -179,6 +179,31 @@ const opacityScale: Record<string, string> = {
   '0.9': 'opacity-90', '0.95': 'opacity-95', '1': 'opacity-100',
 };
 
+// Text decoration
+const textDecorationScale: Record<string, string> = {
+  'none': 'no-underline',
+  'underline': 'underline',
+  'line-through': 'line-through',
+  'overline': 'overline',
+};
+
+// Font style
+const fontStyleScale: Record<string, string> = {
+  'normal': 'not-italic',
+  'italic': 'italic',
+};
+
+// Letter spacing
+const letterSpacingScale: Record<string, string> = {
+  '-0.05em': 'tracking-tighter',
+  '-0.025em': 'tracking-tight',
+  '0': 'tracking-normal',
+  '0em': 'tracking-normal',
+  '0.025em': 'tracking-wide',
+  '0.05em': 'tracking-wider',
+  '0.1em': 'tracking-widest',
+};
+
 /**
  * Parse une valeur de couleur et retourne le format hex normalisé
  */
@@ -526,6 +551,48 @@ export function cssToTailwind(styles: Record<string, string>): FullConversionRes
         } else {
           const percent = Math.round(parseFloat(value) * 100);
           result = { property, originalValue: value, tailwindClass: `opacity-[${percent}%]`, exact: false };
+        }
+        break;
+      }
+
+      // Text decoration
+      case 'textDecoration':
+      case 'text-decoration': {
+        const tw = textDecorationScale[value];
+        if (tw) {
+          result = { property, originalValue: value, tailwindClass: tw, exact: true };
+        }
+        break;
+      }
+
+      // Font style
+      case 'fontStyle':
+      case 'font-style': {
+        const tw = fontStyleScale[value];
+        if (tw) {
+          result = { property, originalValue: value, tailwindClass: tw, exact: true };
+        }
+        break;
+      }
+
+      // Letter spacing
+      case 'letterSpacing':
+      case 'letter-spacing': {
+        const tw = letterSpacingScale[value];
+        if (tw) {
+          result = { property, originalValue: value, tailwindClass: tw, exact: true };
+        } else {
+          // Try to convert px to em
+          const pxMatch = value.match(/^(-?\d+(?:\.\d+)?)px$/);
+          if (pxMatch) {
+            const px = parseFloat(pxMatch[1]);
+            const em = (px / 16).toFixed(3);
+            if (letterSpacingScale[`${em}em`]) {
+              result = { property, originalValue: value, tailwindClass: letterSpacingScale[`${em}em`], exact: false };
+            } else {
+              result = { property, originalValue: value, tailwindClass: `tracking-[${value}]`, exact: false };
+            }
+          }
         }
         break;
       }

@@ -110,6 +110,10 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
   
   // Activity tracking - real-time events
   const [activities, setActivities] = useState<Activity[]>([]);
+  const activityCounterRef = useRef(0);
+  
+  // Limite maximale d'activités pour éviter les problèmes de performance et de mémoire
+  const MAX_ACTIVITIES = 50;
   
   // ============================================================================
   // REALM Protocol State
@@ -124,6 +128,22 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
   const currentStreamRef = useRef<string>('');
   const copilotStreamRef = useRef<string>('');
   const isConnectingRef = useRef(false);
+  
+  // Helper pour ajouter une activité avec ID unique et limite de taille
+  const addActivity = useCallback((type: ActivityType, data: Activity['data']) => {
+    setActivities(prev => {
+      activityCounterRef.current += 1;
+      const newActivity: Activity = {
+        id: `activity_${activityCounterRef.current}_${Date.now()}`,
+        type,
+        timestamp: Date.now(),
+        data
+      };
+      const updated = [...prev, newActivity];
+      // Garder seulement les 50 dernières activités
+      return updated.slice(-MAX_ACTIVITIES);
+    });
+  }, []);
 
   // ============================================================================
   // REALM Protocol Setup
@@ -142,29 +162,18 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
     // Listen to REALM events
     const unsubscribeStyleChange = client.on('STYLE_CHANGED', (event) => {
       console.log('[Bridge/REALM] Style changed:', event);
-      // Add to activities for visibility
-      setActivities(prev => [{
-        id: `realm-style-${Date.now()}`,
-        type: 'file_modify' as ActivityType,
-        timestamp: Date.now(),
-        data: {
-          path: 'realmId' in event ? event.realmId.sourceFile : 'unknown',
-          message: `REALM style change (preview: ${'preview' in event ? event.preview : false})`
-        }
-      }, ...prev].slice(0, 50));
+      addActivity('file_modify', {
+        path: 'realmId' in event ? event.realmId.sourceFile : 'unknown',
+        message: `REALM style change (preview: ${'preview' in event ? event.preview : false})`
+      });
     });
     
     const unsubscribeTextChange = client.on('TEXT_CHANGED', (event) => {
       console.log('[Bridge/REALM] Text changed:', event);
-      setActivities(prev => [{
-        id: `realm-text-${Date.now()}`,
-        type: 'file_modify' as ActivityType,
-        timestamp: Date.now(),
-        data: {
-          path: 'realmId' in event ? event.realmId.sourceFile : 'unknown',
-          message: 'REALM text change'
-        }
-      }, ...prev].slice(0, 50));
+      addActivity('file_modify', {
+        path: 'realmId' in event ? event.realmId.sourceFile : 'unknown',
+        message: 'REALM text change'
+      });
     });
     
     const unsubscribeElementSelected = client.on('ELEMENT_SELECTED', (event) => {
@@ -176,28 +185,18 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
     
     const unsubscribeCommit = client.on('COMMIT_COMPLETED', (event) => {
       console.log('[Bridge/REALM] Commit completed:', event);
-      setActivities(prev => [{
-        id: `realm-commit-${Date.now()}`,
-        type: 'file_modify' as ActivityType,
-        timestamp: Date.now(),
-        data: {
-          path: 'realmId' in event ? event.realmId.sourceFile : 'file',
-          message: 'Changes committed successfully'
-        }
-      }, ...prev].slice(0, 50));
+      addActivity('file_modify', {
+        path: 'realmId' in event ? event.realmId.sourceFile : 'file',
+        message: 'Changes committed successfully'
+      });
     });
     
     const unsubscribeRollback = client.on('ROLLBACK_COMPLETED', (event) => {
       console.log('[Bridge/REALM] Rollback completed:', event);
-      setActivities(prev => [{
-        id: `realm-rollback-${Date.now()}`,
-        type: 'diagnostic' as ActivityType,
-        timestamp: Date.now(),
-        data: {
-          message: 'Changes rolled back',
-          severity: 'warning' as const
-        }
-      }, ...prev].slice(0, 50));
+      addActivity('diagnostic', {
+        message: 'Changes rolled back',
+        severity: 'warning' as const
+      });
     });
     
     // Connect if disconnected
@@ -463,29 +462,25 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
             case 'activity':
               const activity = message.payload as Activity;
               console.log('[Bridge] Activity:', activity.type, activity.data.message || activity.data.path);
+              // Utiliser la fonction addActivity pour garantir des IDs uniques
               setActivities(prev => {
-                // Garder uniquement les 50 dernières activités pour éviter les problèmes de mémoire
-                const newActivities = [...prev, activity];
-                if (newActivities.length > 50) {
-                  return newActivities.slice(-50);
-                }
-                return newActivities;
+                activityCounterRef.current += 1;
+                const activityWithUniqueId = {
+                  ...activity,
+                  id: `activity_${activityCounterRef.current}_${Date.now()}`
+                };
+                const updated = [...prev, activityWithUniqueId];
+                return updated.slice(-MAX_ACTIVITIES);
               });
               break;
             // ============== End Activity Tracking ==============
             
             case 'elementChangesApplied':
               console.log('[Bridge] Element changes applied successfully:', message.payload);
-              // Could add a toast notification here
-              setActivities(prev => [{
-                id: `save-${Date.now()}`,
-                type: 'file_modify' as ActivityType,
-                timestamp: Date.now(),
-                data: {
-                  path: message.payload?.file || 'source file',
-                  message: 'Changes saved successfully'
-                }
-              }, ...prev].slice(0, 50));
+              addActivity('file_modify', {
+                path: message.payload?.file || 'source file',
+                message: 'Changes saved successfully'
+              });
               break;
               
             case 'elementChangesError':
@@ -498,15 +493,10 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
                 fullPayload: message.payload
               });
               setError(`${errorMsg}${errorDetails}`);
-              setActivities(prev => [{
-                id: `error-${Date.now()}`,
-                type: 'diagnostic' as ActivityType,
-                timestamp: Date.now(),
-                data: {
-                  message: errorMsg + errorDetails,
-                  severity: 'error' as const
-                }
-              }, ...prev].slice(0, 50));
+              addActivity('diagnostic', {
+                message: errorMsg + errorDetails,
+                severity: 'error' as const
+              });
               break;
               
             case 'error':

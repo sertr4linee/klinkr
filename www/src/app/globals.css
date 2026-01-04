@@ -55,3 +55,36 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-zinc-800 rounded-full border-2 border-zinc-950;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-zinc-700;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme('colors.zinc.800') transparent;
+}
+
+.gradient-button {
+  background: linear-gradient(82.3deg, #2d79ff 10.8%, #2a48f4 94.3%);
+}
+
+.gradient-button-variant {
+  background: linear-gradient(82.3deg, #464646 10.8%, #18181b 94.3%);
+}
+

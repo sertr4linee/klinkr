@@ -451,100 +451,121 @@ export function LivePreviewWithSelector({
         {/* Main Preview Area */}
         <div className="flex flex-1 flex-col">
           {/* Toolbar */}
-          <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 py-2">
+          <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm px-4 py-3 gap-4">
+            {/* Left: Tools */}
             <div className="flex items-center gap-2">
-              <Button
-                variant={isSelecting ? "default" : "outline"}
-                size="sm"
-                onClick={() => setIsSelecting(!isSelecting)}
-                className={cn(
-                  "gap-2",
-                  isSelecting && "bg-blue-600 hover:bg-blue-700"
+              <div className="flex items-center bg-zinc-900 rounded-lg p-1 border border-zinc-800">
+                <Button
+                  variant={isSelecting ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setIsSelecting(!isSelecting)}
+                  className={cn(
+                    "h-7 px-3 text-xs gap-2 transition-all",
+                    isSelecting && "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
+                  )}
+                  disabled={!iframeLoaded}
+                  title="Select Element (Cmd+Click)"
+                >
+                  <MousePointerClickIcon className="size-3.5" />
+                  <span className="font-medium">Select</span>
+                </Button>
+                
+                {selectedElement && (
+                  <>
+                    <div className="w-px h-4 bg-zinc-800 mx-1" />
+                    <Button
+                      variant={isEditing ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setIsEditing(!isEditing)}
+                      className={cn(
+                        "h-7 px-3 text-xs gap-2 transition-all",
+                        isEditing && "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                      )}
+                    >
+                      <PencilIcon className="size-3.5" />
+                      <span className="font-medium">Edit</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearSelection}
+                      className="h-7 w-7 p-0 text-zinc-500 hover:text-zinc-300"
+                      title="Clear Selection"
+                    >
+                      <XIcon className="size-3.5" />
+                    </Button>
+                  </>
                 )}
-                disabled={!iframeLoaded}
-              >
-                <MousePointerClickIcon className="size-4" />
-                {isSelecting ? "Inspecting..." : "Select Element"}
-              </Button>
-              
+              </div>
+
+              {/* Status Indicators */}
               {!iframeLoaded && (
-                <span className="text-xs text-zinc-500">Loading...</span>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 text-amber-500 rounded-md text-xs font-medium border border-amber-500/20">
+                  <RefreshCwIcon className="size-3 animate-spin" />
+                  Loading...
+                </div>
               )}
               
               {hoveredElement && isSelecting && (
-                <span className="text-xs text-blue-400">
-                  Hovering: <code className="rounded bg-zinc-800 px-1 py-0.5">{hoveredElement.tagName}</code>
-                </span>
-              )}
-              
-              {selectedElement && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearSelection}
-                  className="gap-2 text-zinc-400"
-                >
-                  <XIcon className="size-4" />
-                  Clear
-                </Button>
-              )}
-              
-              {selectedElement && (
-                <Button
-                  variant={isEditing ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setIsEditing(!isEditing)}
-                  className={cn(
-                    "gap-2",
-                    isEditing && "bg-green-600 hover:bg-green-700"
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 text-blue-400 rounded-md text-xs border border-blue-500/20 animate-in fade-in slide-in-from-left-2 duration-200">
+                  <TargetIcon className="size-3" />
+                  <span className="font-mono font-medium">{hoveredElement.tagName.toLowerCase()}</span>
+                  {hoveredElement.className && (
+                    <span className="opacity-50 truncate max-w-[100px]">.{hoveredElement.className.split(' ')[0]}</span>
                   )}
-                >
-                  <PencilIcon className="size-4" />
-                  {isEditing ? "Editing..." : "Edit Element"}
-                </Button>
+                </div>
               )}
-              
-              {/* REALM connection indicator */}
-              <div className="flex items-center gap-1 ml-2">
-                <div 
-                  className={cn(
-                    "size-2 rounded-full",
-                    realmConnectionState === 'connected' && "bg-green-500",
-                    realmConnectionState === 'connecting' && "bg-yellow-500 animate-pulse",
-                    realmConnectionState === 'disconnected' && "bg-zinc-500",
-                    realmConnectionState === 'error' && "bg-red-500",
-                  )}
-                  title={`REALM: ${realmConnectionState}`}
-                />
-                <span className="text-xs text-zinc-500">REALM</span>
+            </div>
+
+            {/* Center: Address Bar */}
+            <div className="flex-1 max-w-xl mx-auto">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                  <div className={cn(
+                    "size-2 rounded-full transition-colors",
+                    realmConnectionState === 'connected' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" :
+                    realmConnectionState === 'connecting' ? "bg-amber-500 animate-pulse" :
+                    "bg-zinc-600"
+                  )} />
+                </div>
+                <div className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-1.5 pl-8 pr-10 text-xs text-zinc-400 font-mono flex items-center transition-colors group-hover:border-zinc-700">
+                  <span className="truncate">{url}</span>
+                </div>
+                <div className="absolute inset-y-0 right-1 flex items-center">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleRefresh}
+                    className="size-6 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded-md"
+                    title="Refresh Preview"
+                  >
+                    <RefreshCwIcon className="size-3" />
+                  </Button>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300">
-                {url}
-              </div>
-              
+            {/* Right: Window Controls */}
+            <div className="flex items-center gap-1">
               <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleRefresh}
-              >
-                <RefreshCwIcon className="size-4" />
-              </Button>
-              
-              <Button
-                variant="ghost"
-                size="icon"
+                variant={sidebarOpen ? "secondary" : "ghost"}
+                size="sm"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
+                className={cn(
+                  "h-8 w-8 p-0 transition-colors",
+                  sidebarOpen ? "bg-zinc-800 text-zinc-200" : "text-zinc-500 hover:text-zinc-300"
+                )}
+                title="Toggle Sidebar"
               >
                 <LayersIcon className="size-4" />
               </Button>
               
               <Button
                 variant="ghost"
-                size="icon"
+                size="sm"
                 onClick={() => setIsFullscreen(!isFullscreen)}
+                className="h-8 w-8 p-0 text-zinc-500 hover:text-zinc-300"
+                title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
               >
                 {isFullscreen ? (
                   <MinimizeIcon className="size-4" />
@@ -554,13 +575,18 @@ export function LivePreviewWithSelector({
               </Button>
               
               {onClose && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onClose}
-                >
-                  <XIcon className="size-4" />
-                </Button>
+                <>
+                  <div className="w-px h-4 bg-zinc-800 mx-2" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onClose}
+                    className="h-8 w-8 p-0 text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                    title="Close Preview"
+                  >
+                    <XIcon className="size-4" />
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -663,42 +689,49 @@ function ElementSelectorSidebar({
   return (
     <div className="flex w-80 flex-col border-l border-zinc-800 bg-zinc-900">
       {/* Header */}
-      <div className="border-b border-zinc-800 p-4">
-        <h2 className="font-semibold text-white flex items-center gap-2">
-          <BoxSelectIcon className="size-5" />
-          Element Inspector
-        </h2>
-        <p className="text-sm text-zinc-500 mt-1">
+      <div className="border-b border-zinc-800 p-4 bg-zinc-800">
+        <div className="flex items-center gap-2.5 mb-1">
+          <div className="flex items-center justify-center size-6 rounded bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20">
+            <BoxSelectIcon className="size-3.5" />
+          </div>
+          <h2 className="text-xs font-semibold text-zinc-100 uppercase tracking-wide">
+            Inspector
+          </h2>
+        </div>
+        <p className="text-[11px] text-zinc-500 pl-[34px]">
           {selectedElement
-            ? "Element selected"
+            ? "Viewing selected element details"
             : hoveredElement
-            ? "Hovering element"
-            : "Click to select an element"}
+            ? "Hovering element details"
+            : "Select an element to inspect"}
         </p>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
         {currentElement ? (
-          <div className="divide-y divide-zinc-800">
+          <div className="divide-y divide-zinc-800/50">
             {/* Element Info */}
             <SidebarSection
-              title="Element"
-              icon={<TargetIcon className="size-4" />}
+              title="Identity"
+              icon={<TargetIcon className="size-3.5" />}
               isExpanded={expandedSections.has("info")}
               onToggle={() => toggleSection("info")}
             >
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <InfoRow
-                  label="Tag"
-                  value={currentElement.tagName}
+                  label="Tag Name"
+                  value={currentElement.tagName.toLowerCase()}
                   onCopy={() => copyToClipboard(currentElement.tagName)}
+                  isCode
                 />
                 {currentElement.id && (
                   <InfoRow
                     label="ID"
                     value={`#${currentElement.id}`}
                     onCopy={() => copyToClipboard(currentElement.id!)}
+                    isCode
+                    textColor="text-amber-400"
                   />
                 )}
                 {currentElement.className && (
@@ -707,6 +740,8 @@ function ElementSelectorSidebar({
                     value={currentElement.className}
                     onCopy={() => copyToClipboard(currentElement.className!)}
                     multiline
+                    isCode
+                    textColor="text-blue-300"
                   />
                 )}
                 <InfoRow
@@ -714,27 +749,29 @@ function ElementSelectorSidebar({
                   value={generateSelector(currentElement)}
                   onCopy={() => copyToClipboard(generateSelector(currentElement))}
                   highlight
+                  isCode
                 />
-                <InfoRow
-                  label="Children"
-                  value={String(currentElement.children)}
-                />
-
+                
                 {/* Path */}
-                <div className="pt-2">
-                  <span className="text-xs text-zinc-500 uppercase tracking-wider">
-                    DOM Path
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                    Hierarchy
                   </span>
-                  <div className="mt-1 flex flex-wrap gap-1 text-xs">
+                  <div className="flex flex-wrap gap-1.5">
                     {currentElement.path.map((segment, i) => (
-                      <span key={i} className="flex items-center">
-                        <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-300">
-                          {segment}
+                      <div key={i} className="flex items-center text-[10px]">
+                        <code className={cn(
+                          "px-1.5 py-0.5 rounded border",
+                          i === currentElement.path.length - 1 
+                            ? "bg-blue-500/10 text-blue-400 border-blue-500/20" 
+                            : "bg-zinc-900 text-zinc-400 border-zinc-800"
+                        )}>
+                          {segment.split(':')[0]}
                         </code>
                         {i < currentElement.path.length - 1 && (
-                          <ChevronRightIcon className="size-3 text-zinc-600 mx-1" />
+                          <ChevronRightIcon className="size-3 text-zinc-700 mx-0.5" />
                         )}
-                      </span>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -743,47 +780,50 @@ function ElementSelectorSidebar({
 
             {/* Dimensions */}
             <SidebarSection
-              title="Dimensions"
-              icon={<MaximizeIcon className="size-4" />}
+              title="Layout & Geometry"
+              icon={<MaximizeIcon className="size-3.5" />}
               isExpanded={expandedSections.has("dimensions")}
               onToggle={() => toggleSection("dimensions")}
             >
-              <div className="grid grid-cols-2 gap-2">
-                <InfoRow
-                  label="Width"
-                  value={`${Math.round(currentElement.rect.width)}px`}
-                />
-                <InfoRow
-                  label="Height"
-                  value={`${Math.round(currentElement.rect.height)}px`}
-                />
-                <InfoRow
-                  label="X"
-                  value={`${Math.round(currentElement.rect.x)}px`}
-                />
-                <InfoRow
-                  label="Y"
-                  value={`${Math.round(currentElement.rect.y)}px`}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-2 rounded bg-zinc-900/50 border border-zinc-800/50 space-y-1">
+                  <span className="text-[10px] text-zinc-500 uppercase">Size</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-xs font-mono text-zinc-300">{Math.round(currentElement.rect.width)}</span>
+                    <span className="text-[10px] text-zinc-600">×</span>
+                    <span className="text-xs font-mono text-zinc-300">{Math.round(currentElement.rect.height)}</span>
+                  </div>
+                </div>
+                <div className="p-2 rounded bg-zinc-900/50 border border-zinc-800/50 space-y-1">
+                  <span className="text-[10px] text-zinc-500 uppercase">Position</span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[10px] text-zinc-500">x:</span>
+                    <span className="text-xs font-mono text-zinc-300">{Math.round(currentElement.rect.x)}</span>
+                    <span className="text-[10px] text-zinc-500">y:</span>
+                    <span className="text-xs font-mono text-zinc-300">{Math.round(currentElement.rect.y)}</span>
+                  </div>
+                </div>
               </div>
             </SidebarSection>
 
             {/* Styles */}
             <SidebarSection
               title="Computed Styles"
-              icon={<CodeIcon className="size-4" />}
+              icon={<CodeIcon className="size-3.5" />}
               isExpanded={expandedSections.has("styles")}
               onToggle={() => toggleSection("styles")}
             >
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-2">
                 {Object.entries(currentElement.computedStyles).map(
-                  ([key, value]) => (
-                    <InfoRow
-                      key={key}
-                      label={key.replace(/([A-Z])/g, "-$1").toLowerCase()}
-                      value={value}
-                      onCopy={() => copyToClipboard(`${key}: ${value}`)}
-                    />
+                  ([key, value]) => value && (
+                    <div key={key} className="grid grid-cols-[100px_1fr] items-center gap-2 text-[11px]">
+                      <span className="text-zinc-500 truncate" title={key}>
+                        {key.replace(/([A-Z])/g, "-$1").toLowerCase()}
+                      </span>
+                      <code className="font-mono text-zinc-300 truncate bg-zinc-900/50 px-1.5 py-0.5 rounded border border-zinc-800/50" title={value}>
+                        {value}
+                      </code>
+                    </div>
                   )
                 )}
               </div>
@@ -792,7 +832,7 @@ function ElementSelectorSidebar({
             {/* Attributes */}
             <SidebarSection
               title="Attributes"
-              icon={<LayersIcon className="size-4" />}
+              icon={<LayersIcon className="size-3.5" />}
               isExpanded={expandedSections.has("attributes")}
               onToggle={() => toggleSection("attributes")}
             >
@@ -800,27 +840,30 @@ function ElementSelectorSidebar({
                 <div className="space-y-2">
                   {Object.entries(currentElement.attributes).map(
                     ([key, value]) => (
-                      <InfoRow
-                        key={key}
-                        label={key}
-                        value={value || "(empty)"}
-                        onCopy={() => copyToClipboard(`${key}="${value}"`)}
-                      />
+                      <div key={key} className="flex flex-col gap-1">
+                        <span className="text-[10px] text-zinc-500 font-mono">{key}</span>
+                        <code className="text-[11px] bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-300 break-all">
+                          {value || '""'}
+                        </code>
+                      </div>
                     )
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-zinc-500">No attributes</p>
+                <div className="text-center py-2">
+                  <span className="text-[10px] text-zinc-600 italic">No attributes found</span>
+                </div>
               )}
             </SidebarSection>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center p-8 text-center">
-            <MousePointerClickIcon className="size-12 text-zinc-700 mb-4" />
-            <p className="text-zinc-400 font-medium">No element selected</p>
-            <p className="text-zinc-500 text-sm mt-1">
-              Click "Select Element" and hover over the preview to inspect
-              elements
+          <div className="flex flex-col items-center justify-center h-full p-8 text-center opacity-50">
+            <div className="size-12 rounded-full bg-zinc-900 flex items-center justify-center mb-4 ring-1 ring-zinc-800">
+              <MousePointerClickIcon className="size-5 text-zinc-600" />
+            </div>
+            <p className="text-zinc-400 font-medium text-sm">No Selection</p>
+            <p className="text-zinc-600 text-xs mt-1 max-w-[180px]">
+              Click an element in the preview to inspect its properties
             </p>
           </div>
         )}
@@ -846,22 +889,22 @@ function SidebarSection({
   children,
 }: SidebarSectionProps) {
   return (
-    <div>
+    <div className="group">
       <button
-        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+        className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-zinc-900 transition-colors"
         onClick={onToggle}
       >
-        <div className="flex items-center gap-2 text-sm font-medium text-zinc-200">
+        <div className="flex items-center gap-2 text-[11px] font-semibold text-zinc-400 group-hover:text-zinc-200 uppercase tracking-wider">
           {icon}
           {title}
         </div>
         {isExpanded ? (
-          <ChevronDownIcon className="size-4 text-zinc-500" />
+          <ChevronDownIcon className="size-3.5 text-zinc-600 group-hover:text-zinc-400" />
         ) : (
-          <ChevronRightIcon className="size-4 text-zinc-500" />
+          <ChevronRightIcon className="size-3.5 text-zinc-600 group-hover:text-zinc-400" />
         )}
       </button>
-      {isExpanded && <div className="px-4 pb-4">{children}</div>}
+      {isExpanded && <div className="px-4 pb-4 pt-1 animate-in slide-in-from-top-1 duration-200">{children}</div>}
     </div>
   );
 }
@@ -873,34 +916,44 @@ interface InfoRowProps {
   onCopy?: () => void;
   multiline?: boolean;
   highlight?: boolean;
+  isCode?: boolean;
+  textColor?: string;
 }
 
-function InfoRow({ label, value, onCopy, multiline, highlight }: InfoRowProps) {
+function InfoRow({ label, value, onCopy, multiline, highlight, isCode, textColor }: InfoRowProps) {
   return (
-    <div className={cn("group", multiline && "flex flex-col gap-1")}>
-      <span className="text-xs text-zinc-500 uppercase tracking-wider">
-        {label}
-      </span>
-      <div className="flex items-start gap-2">
-        <code
-          className={cn(
-            "flex-1 rounded px-2 py-1 text-xs",
-            highlight
-              ? "bg-blue-900/30 text-blue-300 border border-blue-800"
-              : "bg-zinc-800 text-zinc-300",
-            multiline && "break-all"
-          )}
-        >
-          {value}
-        </code>
+    <div className={cn("group/row space-y-1.5", multiline && "flex flex-col")}>
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+          {label}
+        </span>
         {onCopy && (
           <button
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-zinc-700 rounded"
-            onClick={onCopy}
+            className="opacity-0 group-hover/row:opacity-100 transition-opacity p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-zinc-300"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopy();
+            }}
+            title="Copy value"
           >
-            <CopyIcon className="size-3 text-zinc-400" />
+            <CopyIcon className="size-3" />
           </button>
         )}
+      </div>
+      <div className={cn(
+        "relative rounded-md border transition-colors",
+        highlight 
+          ? "bg-blue-500/10 border-blue-500/20" 
+          : "bg-zinc-900 border-zinc-800 group-hover/row:border-zinc-700"
+      )}>
+        <div className={cn(
+          "px-2.5 py-1.5 text-[11px]",
+          isCode && "font-mono",
+          textColor || (highlight ? "text-blue-300" : "text-zinc-300"),
+          multiline && "break-all leading-relaxed"
+        )}>
+          {value}
+        </div>
       </div>
     </div>
   );

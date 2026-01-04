@@ -52,7 +52,11 @@ import {
   MinusIcon,
   UnfoldHorizontalIcon,
   UnfoldVerticalIcon,
-  LockIcon
+  LockIcon,
+  ItalicIcon,
+  UnderlineIcon,
+  StrikethroughIcon,
+  BanIcon
 } from 'lucide-react';
 import { 
   DropdownMenu,
@@ -62,6 +66,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 import { TAILWIND_COLORS, SPECIAL_COLORS } from '@/lib/tailwind-colors';
 import { cssToTailwind, mergeClasses, type FullConversionResult } from '@/lib/css-to-tailwind';
@@ -73,6 +78,21 @@ import {
   GRID_SIZES,
   positionToTailwind 
 } from '@/lib/position-to-tailwind';
+
+const Section = ({ title, icon: Icon, children, className, action }: { title: string; icon?: any; children: React.ReactNode; className?: string; action?: React.ReactNode }) => (
+  <div className={cn("space-y-3 py-1", className)}>
+    <div className="flex items-center justify-between px-1">
+      <div className="flex items-center gap-2 text-zinc-400">
+        {Icon && <Icon className="size-3.5" />}
+        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">{title}</span>
+      </div>
+      {action}
+    </div>
+    <div className="space-y-2.5 px-1">
+      {children}
+    </div>
+  </div>
+);
 
 export interface ElementStyles {
   // Layout
@@ -98,6 +118,9 @@ export interface ElementStyles {
   fontFamily?: string;
   lineHeight?: string;
   textAlign?: string;
+  textDecoration?: string;
+  fontStyle?: string;
+  letterSpacing?: string;
   // Background
   backgroundColor?: string;
   backgroundImage?: string;
@@ -198,6 +221,7 @@ export function ElementEditor({
   onSaveComplete,
   className 
 }: ElementEditorProps) {
+  const { addToast } = useToast();
   const [localStyles, setLocalStyles] = useState<ElementStyles>({});
   const [localText, setLocalText] = useState('');
   const [copied, setCopied] = useState(false);
@@ -308,15 +332,46 @@ export function ElementEditor({
   const handleStyleChange = useCallback((key: keyof ElementStyles, value: string) => {
     if (!element) return;
     
-    const newStyles = { ...localStyles, [key]: value };
-    setLocalStyles(newStyles);
-    setHasChanges(true);
+    try {
+      const newStyles = { ...localStyles, [key]: value };
+      setLocalStyles(newStyles);
+      setHasChanges(true);
+      
+      console.log(`[ElementEditor] handleStyleChange: ${key} = ${value}`);
+      
+      // Apply live to preview
+      onStyleChange(element.selector, { [key]: value });
+    } catch (error) {
+      console.error('[ElementEditor] Error changing style:', error);
+      addToast({
+        title: 'Error changing style',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        type: 'error'
+      });
+    }
+  }, [element, localStyles, onStyleChange, addToast]);
+
+  const handleMultiStyleChange = useCallback((changes: Partial<ElementStyles>) => {
+    if (!element) return;
     
-    console.log(`[ElementEditor] handleStyleChange: ${key} = ${value}`);
-    
-    // Apply live to preview
-    onStyleChange(element.selector, { [key]: value });
-  }, [element, localStyles, onStyleChange]);
+    try {
+      const newStyles = { ...localStyles, ...changes };
+      setLocalStyles(newStyles);
+      setHasChanges(true);
+      
+      console.log(`[ElementEditor] handleMultiStyleChange:`, changes);
+      
+      // Apply live to preview
+      onStyleChange(element.selector, changes);
+    } catch (error) {
+      console.error('[ElementEditor] Error changing styles:', error);
+      addToast({
+        title: 'Error changing styles',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        type: 'error'
+      });
+    }
+  }, [element, localStyles, onStyleChange, addToast]);
 
   const handleTextChange = useCallback((text: string) => {
     if (!element) return;
@@ -380,23 +435,24 @@ export function ElementEditor({
         unconverted: conversionResult.unconverted
       });
       
+      // Add converted classes
       if (conversionResult.classes.length > 0) {
         allTailwindClasses.push(...conversionResult.classes);
-        
-        // Only keep unconverted styles as inline
-        if (conversionResult.unconverted.length > 0) {
-          const unconvertedStyles: Partial<ElementStyles> = {};
-          for (const item of conversionResult.unconverted) {
-            unconvertedStyles[item.property as keyof ElementStyles] = item.value;
-          }
-          changes.styles = unconvertedStyles;
-        }
-        
-        console.log('[ElementEditor] Style Tailwind conversion:', {
-          classes: conversionResult.classes,
-          unconvertedStyles: changes.styles
-        });
       }
+      
+      // Always keep unconverted styles as inline
+      if (conversionResult.unconverted.length > 0) {
+        const unconvertedStyles: Partial<ElementStyles> = {};
+        for (const item of conversionResult.unconverted) {
+          unconvertedStyles[item.property as keyof ElementStyles] = item.value;
+        }
+        changes.styles = unconvertedStyles;
+      }
+      
+      console.log('[ElementEditor] Style Tailwind conversion:', {
+        classes: conversionResult.classes,
+        unconvertedStyles: changes.styles
+      });
     } else if (Object.keys(styleChanges).length > 0) {
       // Save as inline styles
       changes.styles = styleChanges;
@@ -448,6 +504,12 @@ export function ElementEditor({
         setHasChanges(false);
         // Deselect element after save
         onSaveComplete?.();
+        
+        addToast({
+          title: 'Changes applied',
+          description: 'Your changes have been applied to the code.',
+          type: 'success'
+        });
       }, 800);
     } else {
       console.log('[ElementEditor] No changes to apply');
@@ -464,8 +526,14 @@ export function ElementEditor({
       if (element.textContent) {
         onTextChange(element.selector, element.textContent);
       }
+      
+      addToast({
+        title: 'Reset',
+        description: 'Changes have been reset.',
+        type: 'info'
+      });
     }
-  }, [element, onStyleChange, onTextChange]);
+  }, [element, onStyleChange, onTextChange, addToast]);
 
   const generateCSS = useCallback(() => {
     const css = Object.entries(localStyles)
@@ -496,947 +564,112 @@ export function ElementEditor({
   }
 
   return (
-    <div className={cn("flex flex-col h-full max-h-screen bg-zinc-900", className)}>
+    <div className={cn("flex flex-col h-full max-h-screen bg-zinc-900 text-zinc-200", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-zinc-800 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[11px] font-mono text-blue-400 truncate">
-            &lt;{element.tagName}&gt;
-          </span>
-          {element.id && (
-            <span className="text-[10px] text-zinc-500">#{element.id}</span>
-          )}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800/50 bg-zinc-800 backdrop-blur-sm shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center justify-center size-7 rounded-md bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20">
+            <CodeIcon className="size-3.5" />
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-[11px] font-semibold text-zinc-200 truncate leading-tight">
+              {element.tagName.toLowerCase()}
+            </span>
+            <div className="flex items-center gap-1.5 text-[9px] text-zinc-500 truncate leading-tight font-mono">
+              {element.id && <span>#{element.id}</span>}
+              {element.className && <span>.{element.className.split(' ')[0]}</span>}
+            </div>
+          </div>
         </div>
-        {/* Tailwind mode toggle - always visible */}
         <button
           onClick={() => setSaveAsTailwind(!saveAsTailwind)}
           className={cn(
-            "flex items-center gap-1.5 px-2 py-1 rounded text-[10px] transition-colors",
+            "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium transition-all border",
             saveAsTailwind 
-              ? "bg-emerald-500/20 text-emerald-400" 
-              : "bg-zinc-800 text-zinc-500"
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
+              : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-400 hover:border-zinc-700"
           )}
-          title={saveAsTailwind ? "Saving as Tailwind classes" : "Saving as inline styles"}
         >
           <SparklesIcon className="size-3" />
-          <span>TW</span>
+          <span>{saveAsTailwind ? 'Tailwind' : 'CSS'}</span>
         </button>
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="styles" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="w-full justify-start rounded-none border-b border-zinc-800 bg-transparent h-8 shrink-0 overflow-x-auto">
-          <TabsTrigger value="styles" className="text-[11px] py-1 data-[state=active]:bg-zinc-800">
-            <PaintbrushIcon className="size-3 mr-1" />
-            Styles
-          </TabsTrigger>
-          <TabsTrigger value="position" className="text-[11px] py-1 data-[state=active]:bg-zinc-800">
-            <MoveIcon className="size-3 mr-1" />
-            Position
-          </TabsTrigger>
-          <TabsTrigger value="export" className="text-[11px] py-1 data-[state=active]:bg-zinc-800">
-            <SparklesIcon className="size-3 mr-1" />
-            Export
-          </TabsTrigger>
-        </TabsList>
+        <div className="px-3 border-b border-zinc-800/50 bg-zinc-900/30">
+          <TabsList className="w-full justify-start bg-transparent h-9 p-0 gap-4">
+            <TabsTrigger value="styles" className="text-[11px] font-medium h-full data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-[1.5px] data-[state=active]:border-blue-500 data-[state=active]:text-blue-400 rounded-none px-1 text-zinc-500 hover:text-zinc-300 transition-colors">
+              Design
+            </TabsTrigger>
+            <TabsTrigger value="position" className="text-[11px] font-medium h-full data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-[1.5px] data-[state=active]:border-blue-500 data-[state=active]:text-blue-400 rounded-none px-1 text-zinc-500 hover:text-zinc-300 transition-colors">
+              Layout
+            </TabsTrigger>
+            <TabsTrigger value="export" className="text-[11px] font-medium h-full data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-[1.5px] data-[state=active]:border-blue-500 data-[state=active]:text-blue-400 rounded-none px-1 text-zinc-500 hover:text-zinc-300 transition-colors">
+              Code
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-        <div className="flex-1 overflow-y-auto min-h-0">
-          {/* Styles Tab */}
-          <TabsContent value="styles" className="m-0 p-2.5 space-y-3">
-            {/* Colors */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400">Background Color</Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="w-full flex items-center justify-between h-8 px-2.5 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
-                    <div className="flex items-center gap-1.5">
-                      <div 
-                        className="size-3.5 rounded border border-zinc-600"
-                        style={{ backgroundColor: localStyles.backgroundColor || 'transparent' }}
+        <ScrollArea className="flex-1">
+          <div className="p-3 space-y-6">
+            <TabsContent value="styles" className="m-0 space-y-6 outline-none">
+              
+              {/* Typography Section */}
+              <Section title="Typography" icon={TypeIcon}>
+                {/* Font Family */}
+                <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="h-8 justify-between px-2.5 text-[11px] bg-zinc-900 border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700">
+                        <span className="truncate">{localStyles.fontFamily || 'Font Family'}</span>
+                        <ChevronDownIcon className="size-3 opacity-50" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-56 bg-zinc-900 border-zinc-800">
+                      {[
+                        { label: 'System', value: 'system-ui, -apple-system, sans-serif' },
+                        { label: 'Sans Serif', value: 'ui-sans-serif, sans-serif' },
+                        { label: 'Serif', value: 'ui-serif, serif' },
+                        { label: 'Monospace', value: 'ui-monospace, monospace' },
+                        { label: 'Inter', value: 'Inter, sans-serif' },
+                        { label: 'Roboto', value: 'Roboto, sans-serif' },
+                      ].map(({ label, value }) => (
+                        <DropdownMenuItem key={value} onClick={() => handleStyleChange('fontFamily', value)} className="text-[11px]">
+                          {label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                {/* Size & Weight Grid */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-zinc-500 font-medium">Size</Label>
+                    <div className="relative">
+                      <Input 
+                        value={localStyles.fontSize || ''} 
+                        onChange={(e) => handleStyleChange('fontSize', e.target.value)}
+                        className="h-8 pl-2 pr-6 text-[11px] bg-zinc-900 border-zinc-800 focus:border-blue-500/50" 
+                        placeholder="16px"
                       />
-                      <span className="text-[11px] text-zinc-300 font-mono">
-                        {localStyles.backgroundColor || 'Select color'}
-                      </span>
-                    </div>
-                    <PaletteIcon className="size-3.5 text-zinc-500" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-80 max-h-[500px] overflow-y-auto bg-zinc-900 border-zinc-800">
-                  <div className="sticky top-0 bg-zinc-900 border-b border-zinc-800 p-2">
-                    <Input
-                      type="text"
-                      value={localStyles.backgroundColor || ''}
-                      onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
-                      placeholder="#hex or rgb() or transparent"
-                      className="h-7 text-[11px] font-mono bg-zinc-800 border-zinc-700"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </div>
-                  
-                  <div className="p-2">
-                    <DropdownMenuLabel className="text-zinc-400 text-[11px] mb-1.5">Quick Colors</DropdownMenuLabel>
-                    <div className="grid grid-cols-8 gap-1.5 mb-3">
-                      {SPECIAL_COLORS.map((color) => (
-                        <button
-                          key={color.tailwindClass}
-                          onClick={() => handleStyleChange('backgroundColor', color.hex)}
-                          className="size-7 rounded border-2 border-zinc-700 hover:border-blue-500 hover:scale-110 transition-all"
-                          style={{ backgroundColor: color.hex }}
-                          title={color.name}
-                        />
-                      ))}
-                      {colorPresets.map(color => (
-                        <button
-                          key={color}
-                          onClick={() => handleStyleChange('backgroundColor', color)}
-                          className="size-7 rounded border-2 border-zinc-700 hover:border-blue-500 hover:scale-110 transition-all"
-                          style={{ backgroundColor: color }}
-                        />
-                      ))}
-                    </div>
-                    
-                    <DropdownMenuSeparator className="bg-zinc-800 my-2" />
-                    
-                    {TAILWIND_COLORS.map((colorFamily) => (
-                      <div key={colorFamily.name} className="mb-3">
-                        <DropdownMenuLabel className="text-zinc-500 text-[10px] uppercase font-semibold mb-1">
-                          {colorFamily.name}
-                        </DropdownMenuLabel>
-                        <div className="grid grid-cols-11 gap-1">
-                          {colorFamily.shades.map((shade) => (
-                            <button
-                              key={shade.tailwindClass}
-                              onClick={() => handleStyleChange('backgroundColor', shade.hex)}
-                              className={cn(
-                                "size-6 rounded transition-all hover:scale-125 hover:z-10",
-                                localStyles.backgroundColor === shade.hex
-                                  ? "ring-2 ring-blue-500 ring-offset-1 ring-offset-zinc-900"
-                                  : "border border-zinc-700 hover:border-blue-500"
-                              )}
-                              style={{ backgroundColor: shade.hex }}
-                              title={`${colorFamily.name} ${shade.value}`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Text Color */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400">Text Color</Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="w-full flex items-center justify-between h-8 px-2.5 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="size-4 rounded border border-zinc-600"
-                        style={{ backgroundColor: localStyles.color || 'transparent' }}
-                      />
-                      <span className="text-[11px] text-zinc-300 font-mono">
-                        {localStyles.color || 'Select color'}
-                      </span>
-                    </div>
-                    <PaletteIcon className="size-3.5 text-zinc-500" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-80 max-h-[500px] overflow-y-auto bg-zinc-900 border-zinc-800">
-                  <div className="sticky top-0 bg-zinc-900 border-b border-zinc-800 p-2">
-                    <Input
-                      type="text"
-                      value={localStyles.color || ''}
-                      onChange={(e) => handleStyleChange('color', e.target.value)}
-                      placeholder="#hex or rgb() or inherit"
-                      className="h-7 text-[11px] font-mono bg-zinc-800 border-zinc-700"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </div>
-                  
-                  <div className="p-2">
-                    <DropdownMenuLabel className="text-zinc-400 text-[11px] mb-2">Quick Colors</DropdownMenuLabel>
-                    <div className="grid grid-cols-8 gap-1.5 mb-3">
-                      {SPECIAL_COLORS.map((color) => (
-                        <button
-                          key={color.tailwindClass}
-                          onClick={() => handleStyleChange('color', color.hex)}
-                          className="size-8 rounded border-2 border-zinc-700 hover:border-blue-500 hover:scale-110 transition-all"
-                          style={{ backgroundColor: color.hex }}
-                          title={color.name}
-                        />
-                      ))}
-                      {colorPresets.map(color => (
-                        <button
-                          key={color}
-                          onClick={() => handleStyleChange('color', color)}
-                          className="size-8 rounded border-2 border-zinc-700 hover:border-blue-500 hover:scale-110 transition-all"
-                          style={{ backgroundColor: color }}
-                        />
-                      ))}
-                    </div>
-                    
-                    <DropdownMenuSeparator className="bg-zinc-800 my-2" />
-                    
-                    {TAILWIND_COLORS.map((colorFamily) => (
-                      <div key={colorFamily.name} className="mb-3">
-                        <DropdownMenuLabel className="text-zinc-500 text-[10px] uppercase font-semibold mb-1">
-                          {colorFamily.name}
-                        </DropdownMenuLabel>
-                        <div className="grid grid-cols-11 gap-1">
-                          {colorFamily.shades.map((shade) => (
-                            <button
-                              key={shade.tailwindClass}
-                              onClick={() => handleStyleChange('color', shade.hex)}
-                              className={cn(
-                                "size-6 rounded transition-all hover:scale-125 hover:z-10",
-                                localStyles.color === shade.hex
-                                  ? "ring-2 ring-blue-500 ring-offset-1 ring-offset-zinc-900"
-                                  : "border border-zinc-700 hover:border-blue-500"
-                              )}
-                              style={{ backgroundColor: shade.hex }}
-                              title={`${colorFamily.name} ${shade.value}`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Opacity & Radius - Side by Side */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* Opacity */}
-              <div className="space-y-1.5">
-                <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                  <BlendIcon className="size-3" />
-                  Opacity
-                </Label>
-                <div className="relative flex items-center gap-2 h-8 px-2.5 rounded-md bg-zinc-800 border border-zinc-700 hover:border-zinc-600 transition-colors group">
-                  {/* Checkerboard background pattern */}
-                  <div className="size-3.5 rounded overflow-hidden relative flex-shrink-0">
-                    <div className="absolute inset-0" style={{
-                      backgroundImage: `
-                        linear-gradient(45deg, #404040 25%, transparent 25%),
-                        linear-gradient(-45deg, #404040 25%, transparent 25%),
-                        linear-gradient(45deg, transparent 75%, #404040 75%),
-                        linear-gradient(-45deg, transparent 75%, #404040 75%)
-                      `,
-                      backgroundSize: '6px 6px',
-                      backgroundPosition: '0 0, 0 3px, 3px -3px, -3px 0px'
-                    }} />
-                    <div className="absolute inset-0 bg-blue-500 rounded" style={{ 
-                      opacity: parseFloat(localStyles.opacity || '1')
-                    }} />
-                  </div>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={Math.round((parseFloat(localStyles.opacity || '1')) * 100)}
-                    onChange={(e) => {
-                      const percentage = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
-                      handleStyleChange('opacity', (percentage / 100).toString());
-                    }}
-                    className="h-6 w-full px-1 text-[11px] text-right bg-transparent border-0 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                  />
-                  <span className="text-[11px] text-zinc-500 flex-shrink-0">%</span>
-                </div>
-              </div>
-
-              {/* Border Radius */}
-              <div className="space-y-1.5">
-                <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                  <SquareIcon className="size-3" />
-                  Radius
-                </Label>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="w-full flex items-center justify-between h-8 px-2.5 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
-                      <div className="flex items-center gap-1.5">
-                        <SquareIcon className="size-3.5 text-zinc-500" />
-                        <div className="size-3.5 rounded-md border border-zinc-600" style={{ borderRadius: localStyles.borderRadius || '0' }} />
-                        <span className="text-[11px] text-zinc-300">
-                          {localStyles.borderRadius === '0' || localStyles.borderRadius === '0px' || !localStyles.borderRadius ? 'None' :
-                           localStyles.borderRadius === '2px' ? 'Extra Small' :
-                           localStyles.borderRadius === '4px' ? 'Small' :
-                           localStyles.borderRadius === '8px' ? 'Medium' :
-                           localStyles.borderRadius === '12px' || localStyles.borderRadius === '0.75rem' ? 'Large' :
-                           localStyles.borderRadius === '16px' || localStyles.borderRadius === '1rem' ? 'Extra Large' :
-                           localStyles.borderRadius === '24px' || localStyles.borderRadius === '1.5rem' ? 'Double Extra Large' :
-                           localStyles.borderRadius === '32px' || localStyles.borderRadius === '2rem' ? 'Triple Extra Large' :
-                           localStyles.borderRadius === '48px' || localStyles.borderRadius === '3rem' ? 'Quadruple Extra Large' :
-                           localStyles.borderRadius === '9999px' || localStyles.borderRadius === '50%' ? 'Full' :
-                           localStyles.borderRadius}
-                        </span>
-                      </div>
-                      <ChevronDownIcon className="size-3.5 text-zinc-500" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-64 bg-zinc-900 border-zinc-800">
-                    {[
-                      { label: 'None', value: '0' },
-                      { label: 'Extra Small', value: '2px' },
-                      { label: 'Small', value: '4px' },
-                      { label: 'Medium', value: '8px' },
-                      { label: 'Large', value: '12px' },
-                      { label: 'Extra Large', value: '16px' },
-                      { label: 'Double Extra Large', value: '24px' },
-                      { label: 'Triple Extra Large', value: '32px' },
-                      { label: 'Quadruple Extra Large', value: '48px' },
-                      { label: 'Full', value: '9999px' },
-                    ].map(({ label, value }) => (
-                      <DropdownMenuItem
-                        key={value}
-                        onClick={() => handleStyleChange('borderRadius', value)}
-                        className="flex items-center gap-3 cursor-pointer py-2"
-                      >
-                        <div className="size-4 rounded border border-zinc-600 bg-zinc-800" style={{ borderRadius: value }} />
-                        <span className="text-[11px] flex-1">{label}</span>
-                        {(localStyles.borderRadius === value || (value === '0' && (!localStyles.borderRadius || localStyles.borderRadius === '0px'))) && <CheckIcon className="size-3.5 text-blue-500" />}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Box Shadow */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                <CircleDotIcon className="size-3" />
-                Shadow
-              </Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="w-full flex items-center justify-between h-8 px-2.5 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
-                    <div className="flex items-center gap-1.5">
-                      <CircleDotIcon className="size-3.5 text-zinc-500" />
-                      <div className="size-3.5 rounded border border-zinc-600 bg-zinc-700" style={{ 
-                        boxShadow: localStyles.boxShadow || 'none'
-                      }} />
-                      <span className="text-[11px] text-zinc-300">
-                        {localStyles.boxShadow === 'none' || !localStyles.boxShadow ? 'None' :
-                         localStyles.boxShadow === '0 1px 2px rgba(0,0,0,0.1)' ? 'Small' :
-                         localStyles.boxShadow === '0 4px 6px rgba(0,0,0,0.1)' ? 'Medium' :
-                         localStyles.boxShadow === '0 10px 15px rgba(0,0,0,0.1)' ? 'Large' :
-                         localStyles.boxShadow === '0 20px 25px rgba(0,0,0,0.15)' ? 'Extra Large' :
-                         'Custom'}
-                      </span>
-                    </div>
-                    <ChevronDownIcon className="size-3.5 text-zinc-500" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-64 bg-zinc-900 border-zinc-800">
-                  {[
-                    { label: 'None', value: 'none' },
-                    { label: 'Small', value: '0 1px 2px rgba(0,0,0,0.1)' },
-                    { label: 'Medium', value: '0 4px 6px rgba(0,0,0,0.1)' },
-                    { label: 'Large', value: '0 10px 15px rgba(0,0,0,0.1)' },
-                    { label: 'Extra Large', value: '0 20px 25px rgba(0,0,0,0.15)' },
-                  ].map(({ label, value }) => (
-                    <DropdownMenuItem
-                      key={value}
-                      onClick={() => handleStyleChange('boxShadow', value)}
-                      className="flex items-center gap-3 cursor-pointer py-2"
-                    >
-                      <div className="size-4 rounded border border-zinc-600 bg-zinc-700" style={{ boxShadow: value }} />
-                      <span className="text-[11px] flex-1">{label}</span>
-                      {localStyles.boxShadow === value && <CheckIcon className="size-3.5 text-blue-500" />}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* TEXT CONTENT */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400">Text Content</Label>
-              
-              {/* Warning for complex elements */}
-              {element.isComplexText && (
-                <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-md text-[11px] text-amber-300">
-                  <p className="font-medium">⚠️ Complex element</p>
-                  <p className="opacity-80 mt-1">
-                    This element contains {element.childCount} child element(s). 
-                    Text changes will only affect direct text content, not nested elements.
-                  </p>
-                </div>
-              )}
-              
-              {/* Show different text representations */}
-              {element.isComplexText && element.directTextContent && (
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500">Direct text only:</span>
-                  <div className="p-2 bg-zinc-800/50 rounded text-[11px] font-mono text-zinc-300 max-h-16 overflow-auto">
-                    {element.directTextContent || '(no direct text)'}
-                  </div>
-                </div>
-              )}
-              
-              <textarea
-                value={localText}
-                onChange={(e) => {
-                  setLocalText(e.target.value);
-                  setHasChanges(true);
-                }}
-                onBlur={() => {
-                  if (element && localText !== element.textContent) {
-                    console.log('[ElementEditor] Applying text on blur:', element.selector);
-                    onTextChange(element.selector, localText);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                    e.preventDefault();
-                    if (element) {
-                      onTextChange(element.selector, localText);
-                    }
-                  }
-                }}
-                placeholder="Enter text..."
-                className="w-full h-20 p-2 text-[11px] font-mono bg-zinc-800 border border-zinc-700 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-              <p className="text-[10px] text-zinc-600">Press ⌘+Enter to preview • Changes auto-apply</p>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* TYPOGRAPHY */}
-            {/* Font Size */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                <CaseSensitiveIcon className="size-3" />
-                Font Size
-              </Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full h-8 px-2.5 justify-between text-[11px] font-mono"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <CaseSensitiveIcon className="size-3" />
-                      <span style={{ fontSize: localStyles.fontSize || '14px' }}>
-                        Aa
-                      </span>
-                    </span>
-                    <span className="text-zinc-500">
-                      {localStyles.fontSize || 'inherit'}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  {[
-                    { label: 'Extra Small', value: '12px' },
-                    { label: 'Small', value: '14px' },
-                    { label: 'Base', value: '16px' },
-                    { label: 'Large', value: '18px' },
-                    { label: 'Extra Large', value: '20px' },
-                    { label: '2XL', value: '24px' },
-                    { label: '3XL', value: '32px' },
-                    { label: '4XL', value: '48px' }
-                  ].map(({ label, value }) => (
-                    <DropdownMenuItem
-                      key={value}
-                      onClick={() => handleStyleChange('fontSize', value)}
-                      className="flex items-center justify-between"
-                    >
-                      <span className="flex items-center gap-2">
-                        <span 
-                          className="flex items-center justify-center w-12 h-6 bg-zinc-800 rounded"
-                          style={{ fontSize: value }}
-                        >
-                          Aa
-                        </span>
-                        <span className="text-[11px]">{label}</span>
-                      </span>
-                      <span className="text-[10px] text-zinc-500">{value}</span>
-                      {localStyles.fontSize === value && (
-                        <CheckIcon className="size-3 ml-2" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            {/* Font Weight */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                <BoldIcon className="size-3" />
-                Font Weight
-              </Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full h-8 px-2.5 justify-between text-[11px] font-mono"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <BoldIcon className="size-3" />
-                      <span style={{ fontWeight: localStyles.fontWeight || '400' }}>
-                        Aa
-                      </span>
-                    </span>
-                    <span className="text-zinc-500">
-                      {localStyles.fontWeight || '400'}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  {[
-                    { label: 'Normal', value: '400' },
-                    { label: 'Medium', value: '500' },
-                    { label: 'Semi Bold', value: '600' },
-                    { label: 'Bold', value: '700' },
-                    { label: 'Extra Bold', value: '800' }
-                  ].map(({ label, value }) => (
-                    <DropdownMenuItem
-                      key={value}
-                      onClick={() => handleStyleChange('fontWeight', value)}
-                      className="flex items-center justify-between"
-                    >
-                      <span className="flex items-center gap-2">
-                        <span 
-                          className="flex items-center justify-center w-12 h-6 bg-zinc-800 rounded"
-                          style={{ fontWeight: value }}
-                        >
-                          Aa
-                        </span>
-                        <span className="text-[11px]">{label}</span>
-                      </span>
-                      <span className="text-[10px] text-zinc-500">{value}</span>
-                      {localStyles.fontWeight === value && (
-                        <CheckIcon className="size-3 ml-2" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            {/* Text Align */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                <AlignLeftIcon className="size-3" />
-                Text Align
-              </Label>
-              <div className="grid grid-cols-4 gap-1">
-                <Button
-                  variant={localStyles.textAlign === 'left' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => handleStyleChange('textAlign', 'left')}
-                  className="h-8 px-2"
-                >
-                  <AlignLeftIcon className="size-3.5" />
-                </Button>
-                <Button
-                  variant={localStyles.textAlign === 'center' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => handleStyleChange('textAlign', 'center')}
-                  className="h-8 px-2"
-                >
-                  <AlignCenterIcon className="size-3.5" />
-                </Button>
-                <Button
-                  variant={localStyles.textAlign === 'right' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => handleStyleChange('textAlign', 'right')}
-                  className="h-8 px-2"
-                >
-                  <AlignRightIcon className="size-3.5" />
-                </Button>
-                <Button
-                  variant={localStyles.textAlign === 'justify' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => handleStyleChange('textAlign', 'justify')}
-                  className="h-8 px-2"
-                >
-                  <AlignJustifyIcon className="size-3.5" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Line Height */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                <LineChartIcon className="size-3" />
-                Line Height
-              </Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full h-8 px-2.5 justify-between text-[11px] font-mono"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <LineChartIcon className="size-3" />
-                      <span className="text-[10px] leading-tight" style={{ lineHeight: localStyles.lineHeight || '1.5' }}>
-                        Line<br/>Height
-                      </span>
-                    </span>
-                    <span className="text-zinc-500">
-                      {localStyles.lineHeight || 'normal'}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  {[
-                    { label: 'Tight', value: '1' },
-                    { label: 'Snug', value: '1.25' },
-                    { label: 'Normal', value: '1.5' },
-                    { label: 'Relaxed', value: '1.75' },
-                    { label: 'Loose', value: '2' }
-                  ].map(({ label, value }) => (
-                    <DropdownMenuItem
-                      key={value}
-                      onClick={() => handleStyleChange('lineHeight', value)}
-                      className="flex items-center justify-between"
-                    >
-                      <span className="flex items-center gap-2">
-                        <span 
-                          className="flex items-center justify-center w-12 h-8 bg-zinc-800 rounded text-[8px]"
-                          style={{ lineHeight: value }}
-                        >
-                          Line<br/>Height
-                        </span>
-                        <span className="text-[11px]">{label}</span>
-                      </span>
-                      <span className="text-[10px] text-zinc-500">{value}</span>
-                      {localStyles.lineHeight === value && (
-                        <CheckIcon className="size-3 ml-2" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            {/* Font Family */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                <TypeIcon className="size-3" />
-                Font Family
-              </Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full h-8 px-2.5 justify-between text-[11px]"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <TypeIcon className="size-3" />
-                      <span style={{ fontFamily: localStyles.fontFamily || 'inherit' }}>
-                        Aa
-                      </span>
-                    </span>
-                    <span className="text-zinc-500 font-mono text-[10px] truncate max-w-32">
-                      {localStyles.fontFamily || 'inherit'}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-64">
-                  {[
-                    { label: 'System', value: 'system-ui, -apple-system, sans-serif' },
-                    { label: 'Sans Serif', value: 'ui-sans-serif, sans-serif' },
-                    { label: 'Serif', value: 'ui-serif, serif' },
-                    { label: 'Monospace', value: 'ui-monospace, monospace' },
-                    { label: 'Inter', value: 'Inter, sans-serif' },
-                    { label: 'Roboto', value: 'Roboto, sans-serif' },
-                    { label: 'Open Sans', value: '"Open Sans", sans-serif' },
-                    { label: 'Lato', value: 'Lato, sans-serif' },
-                    { label: 'Poppins', value: 'Poppins, sans-serif' },
-                    { label: 'Montserrat', value: 'Montserrat, sans-serif' }
-                  ].map(({ label, value }) => (
-                    <DropdownMenuItem
-                      key={value}
-                      onClick={() => handleStyleChange('fontFamily', value)}
-                      className="flex items-center justify-between"
-                    >
-                      <span className="flex items-center gap-2">
-                        <span 
-                          className="flex items-center justify-center w-12 h-6 bg-zinc-800 rounded text-xs"
-                          style={{ fontFamily: value }}
-                        >
-                          Aa
-                        </span>
-                        <span className="text-[11px]">{label}</span>
-                      </span>
-                      {localStyles.fontFamily === value && (
-                        <CheckIcon className="size-3 ml-2" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* LAYOUT */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                <LayoutDashboardIcon className="size-3" />
-                Display
-              </Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full h-8 px-2.5 justify-between text-[11px]"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <LayoutDashboardIcon className="size-3" />
-                      <span>{localStyles.display || 'block'}</span>
-                    </span>
-                    <ChevronDownIcon className="size-3 text-zinc-500" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  {displayOptions.map(value => (
-                    <DropdownMenuItem
-                      key={value}
-                      onClick={() => handleStyleChange('display', value)}
-                      className="flex items-center justify-between"
-                    >
-                      <span className="text-[11px]">{value}</span>
-                      {localStyles.display === value && (
-                        <CheckIcon className="size-3 ml-2" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            {/* Width & Height */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                  <RectangleHorizontalIcon className="size-3" />
-                  Width
-                </Label>
-                <div className="relative">
-                  <RectangleHorizontalIcon className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
-                  <Input
-                    type="text"
-                    value={localStyles.width || ''}
-                    onChange={(e) => handleStyleChange('width', e.target.value)}
-                    placeholder="auto"
-                    className="h-8 pl-7 pr-2.5 text-[11px] font-mono"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                  <RectangleVerticalIcon className="size-3" />
-                  Height
-                </Label>
-                <div className="relative">
-                  <RectangleVerticalIcon className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
-                  <Input
-                    type="text"
-                    value={localStyles.height || ''}
-                    onChange={(e) => handleStyleChange('height', e.target.value)}
-                    placeholder="auto"
-                    className="h-8 pl-7 pr-2.5 text-[11px] font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Padding */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                <SquareDashedBottomIcon className="size-3" />
-                Padding
-              </Label>
-              <div className="flex items-center gap-1">
-                <div className="relative flex-1">
-                  <SquareDashedBottomIcon className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
-                  <Input
-                    type="text"
-                    value={localStyles.padding || ''}
-                    onChange={(e) => handleStyleChange('padding', e.target.value)}
-                    placeholder="0px"
-                    className="h-8 pl-7 pr-2.5 text-[11px] font-mono"
-                  />
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2"
-                  title="Expand padding controls"
-                >
-                  <UnfoldHorizontalIcon className="size-3.5" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2"
-                  title="Lock padding"
-                >
-                  <LockIcon className="size-3.5" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Margin */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                <FrameIcon className="size-3" />
-                Margin
-              </Label>
-              <div className="flex items-center gap-1">
-                <div className="relative flex-1">
-                  <FrameIcon className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
-                  <Input
-                    type="text"
-                    value={localStyles.margin || ''}
-                    onChange={(e) => handleStyleChange('margin', e.target.value)}
-                    placeholder="0px"
-                    className="h-8 pl-7 pr-2.5 text-[11px] font-mono"
-                  />
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2"
-                  title="Expand margin controls"
-                >
-                  <UnfoldHorizontalIcon className="size-3.5" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2"
-                  title="Lock margin"
-                >
-                  <LockIcon className="size-3.5" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Flex options */}
-            {localStyles.display === 'flex' && (
-              <>
-                <Separator className="bg-zinc-800" />
-                
-                {/* Direction */}
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] text-zinc-400">Direction</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant={localStyles.flexDirection === 'row' || !localStyles.flexDirection ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => handleStyleChange('flexDirection', 'row')}
-                      className="h-12 flex-col gap-1"
-                    >
-                      <ArrowRightIcon className="size-4" />
-                      <span className="text-[10px]">Row</span>
-                    </Button>
-                    <Button
-                      variant={localStyles.flexDirection === 'column' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => handleStyleChange('flexDirection', 'column')}
-                      className="h-12 flex-col gap-1"
-                    >
-                      <ArrowDownIcon className="size-4" />
-                      <span className="text-[10px]">Column</span>
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Alignment */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] text-zinc-400">Alignment</Label>
-                    <div className="grid grid-cols-2 gap-1">
-                      <Button
-                        variant={localStyles.alignItems === 'flex-start' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => handleStyleChange('alignItems', 'flex-start')}
-                        className="h-8 px-2"
-                        title="Start"
-                      >
-                        <AlignVerticalJustifyStartIcon className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant={localStyles.alignItems === 'center' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => handleStyleChange('alignItems', 'center')}
-                        className="h-8 px-2"
-                        title="Center"
-                      >
-                        <AlignVerticalJustifyCenterIcon className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant={localStyles.alignItems === 'flex-end' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => handleStyleChange('alignItems', 'flex-end')}
-                        className="h-8 px-2"
-                        title="End"
-                      >
-                        <AlignVerticalJustifyEndIcon className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant={localStyles.alignItems === 'stretch' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => handleStyleChange('alignItems', 'stretch')}
-                        className="h-8 px-2"
-                        title="Stretch"
-                      >
-                        <StretchHorizontalIcon className="size-3.5" />
-                      </Button>
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-600">px</span>
                     </div>
                   </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] text-zinc-400">Justification</Label>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-zinc-500 font-medium">Weight</Label>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="w-full h-8 px-2.5 justify-between text-[11px]"
-                        >
-                          <span className="truncate">
-                            {localStyles.justifyContent?.replace('flex-', '').replace('-', ' ') || 'start'}
-                          </span>
-                          <ChevronDownIcon className="size-3 text-zinc-500 shrink-0" />
+                        <Button variant="outline" className="w-full h-8 justify-between px-2 text-[11px] bg-zinc-900 border-zinc-800">
+                          <span>{localStyles.fontWeight || '400'}</span>
+                          <ChevronDownIcon className="size-3 opacity-50" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-48">
-                        {[
-                          { label: 'Start', value: 'flex-start', icon: AlignHorizontalJustifyStartIcon },
-                          { label: 'Center', value: 'center', icon: AlignHorizontalJustifyCenterIcon },
-                          { label: 'End', value: 'flex-end', icon: AlignHorizontalJustifyEndIcon },
-                          { label: 'Space Between', value: 'space-between', icon: AlignHorizontalSpaceBetweenIcon },
-                          { label: 'Space Around', value: 'space-around', icon: AlignHorizontalSpaceAroundIcon }
-                        ].map(({ label, value, icon: Icon }) => (
-                          <DropdownMenuItem
-                            key={value}
-                            onClick={() => handleStyleChange('justifyContent', value)}
-                            className="flex items-center justify-between"
-                          >
-                            <span className="flex items-center gap-2">
-                              <Icon className="size-3.5" />
-                              <span className="text-[11px]">{label}</span>
-                            </span>
-                            {localStyles.justifyContent === value && (
-                              <CheckIcon className="size-3 ml-2" />
-                            )}
+                      <DropdownMenuContent className="w-32 bg-zinc-900 border-zinc-800">
+                        {['400', '500', '600', '700', '800'].map(w => (
+                          <DropdownMenuItem key={w} onClick={() => handleStyleChange('fontWeight', w)} className="text-[11px]">
+                            {w}
                           </DropdownMenuItem>
                         ))}
                       </DropdownMenuContent>
@@ -1444,251 +677,603 @@ export function ElementEditor({
                   </div>
                 </div>
 
-                {/* Gap */}
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                    <MinusIcon className="size-3" />
-                    Gap
-                  </Label>
+                {/* Align & Color */}
+                <div className="grid grid-cols-[auto_1fr] gap-2">
+                  <div className="flex bg-zinc-900 rounded-md border border-zinc-800 p-0.5">
+                    {['left', 'center', 'right', 'justify'].map((align) => (
+                      <button
+                        key={align}
+                        onClick={() => handleStyleChange('textAlign', align)}
+                        className={cn(
+                          "p-1.5 rounded hover:bg-zinc-800 transition-colors",
+                          localStyles.textAlign === align && "bg-zinc-800 text-blue-400"
+                        )}
+                      >
+                        {align === 'left' && <AlignLeftIcon className="size-3.5" />}
+                        {align === 'center' && <AlignCenterIcon className="size-3.5" />}
+                        {align === 'right' && <AlignRightIcon className="size-3.5" />}
+                        {align === 'justify' && <AlignJustifyIcon className="size-3.5" />}
+                      </button>
+                    ))}
+                  </div>
                   <div className="relative">
-                    <MinusIcon className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
-                    <Input
-                      type="text"
-                      value={localStyles.gap || ''}
-                      onChange={(e) => handleStyleChange('gap', e.target.value)}
-                      placeholder="0px"
-                      className="h-8 pl-7 pr-2.5 text-[11px] font-mono"
-                    />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <div className="relative cursor-pointer group">
+                          <div 
+                            className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 rounded border border-zinc-700 shadow-sm group-hover:scale-110 transition-transform"
+                            style={{ backgroundColor: localStyles.color || 'transparent' }}
+                          />
+                          <Input 
+                            value={localStyles.color || ''}
+                            onChange={(e) => handleStyleChange('color', e.target.value)}
+                            className="h-8 pl-8 text-[11px] bg-zinc-900 border-zinc-800 group-hover:border-zinc-700 transition-colors cursor-pointer"
+                            placeholder="Color..."
+                            readOnly
+                          />
+                        </div>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-64 bg-zinc-900 border-zinc-800 p-2" align="end">
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-8 gap-1">
+                            {SPECIAL_COLORS.map((c) => (
+                              <button
+                                key={c.name}
+                                className="size-6 rounded-md border border-zinc-800 hover:scale-110 transition-transform"
+                                style={{ backgroundColor: c.hex }}
+                                onClick={() => handleStyleChange('color', c.hex)}
+                                title={c.name}
+                              />
+                            ))}
+                          </div>
+                          <div className="space-y-1">
+                            {TAILWIND_COLORS.map((family) => (
+                              <div key={family.name} className="flex gap-0.5">
+                                {family.shades.map((shade) => (
+                                  <button
+                                    key={shade.value}
+                                    className="flex-1 h-4 first:rounded-l-sm last:rounded-r-sm hover:scale-110 hover:z-10 transition-transform"
+                                    style={{ backgroundColor: shade.hex }}
+                                    onClick={() => handleStyleChange('color', shade.hex)}
+                                    title={`${family.name}-${shade.value}`}
+                                  />
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                          <div className="pt-2 border-t border-zinc-800">
+                            <Input 
+                              value={localStyles.color || ''}
+                              onChange={(e) => handleStyleChange('color', e.target.value)}
+                              className="h-7 text-[10px] bg-zinc-950 border-zinc-800"
+                              placeholder="#000000"
+                            />
+                          </div>
+                        </div>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
-              </>
-            )}
 
-          </TabsContent>
+                {/* Decoration & Spacing */}
+                <div className="grid grid-cols-[auto_1fr] gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-zinc-500 font-medium">Decoration</Label>
+                    <div className="flex bg-zinc-900 rounded-md border border-zinc-800 p-0.5">
+                      <button
+                        onClick={() => handleStyleChange('fontStyle', localStyles.fontStyle === 'italic' ? 'normal' : 'italic')}
+                        className={cn(
+                          "p-1.5 rounded hover:bg-zinc-800 transition-colors",
+                          localStyles.fontStyle === 'italic' && "bg-zinc-800 text-blue-400"
+                        )}
+                        title="Italic"
+                      >
+                        <ItalicIcon className="size-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleStyleChange('textDecoration', localStyles.textDecoration?.includes('underline') ? 'none' : 'underline')}
+                        className={cn(
+                          "p-1.5 rounded hover:bg-zinc-800 transition-colors",
+                          localStyles.textDecoration?.includes('underline') && "bg-zinc-800 text-blue-400"
+                        )}
+                        title="Underline"
+                      >
+                        <UnderlineIcon className="size-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleStyleChange('textDecoration', localStyles.textDecoration?.includes('line-through') ? 'none' : 'line-through')}
+                        className={cn(
+                          "p-1.5 rounded hover:bg-zinc-800 transition-colors",
+                          localStyles.textDecoration?.includes('line-through') && "bg-zinc-800 text-blue-400"
+                        )}
+                        title="Strikethrough"
+                      >
+                        <StrikethroughIcon className="size-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleMultiStyleChange({ textDecoration: 'none', fontStyle: 'normal' })}
+                        className="p-1.5 rounded hover:bg-zinc-800 transition-colors"
+                        title="Clear Decoration"
+                      >
+                        <BanIcon className="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-zinc-500 font-medium">Spacing</Label>
+                    <div className="relative">
+                      <Input 
+                        value={localStyles.letterSpacing || ''}
+                        onChange={(e) => handleStyleChange('letterSpacing', e.target.value)}
+                        className="h-8 pl-2 pr-6 text-[11px] bg-zinc-900 border-zinc-800"
+                        placeholder="0px"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-600">px</span>
+                    </div>
+                  </div>
+                </div>
+              </Section>
 
-          {/* Position Tab - NEW Figma-style positioning */}
-          <TabsContent value="position" className="m-0 p-2.5 space-y-2.5">
-            {/* Mode selector */}
-            <PositionModeSelector
-              value={positionMode}
-              onChange={setPositionMode}
-            />
+              {/* Appearance Section */}
+              <Section title="Appearance" icon={PaletteIcon}>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-zinc-500 font-medium">Background</Label>
+                    <div className="relative group">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <div className="relative cursor-pointer group">
+                            <div 
+                              className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 rounded border border-zinc-700 shadow-sm group-hover:scale-110 transition-transform"
+                              style={{ backgroundColor: localStyles.backgroundColor || 'transparent' }}
+                            />
+                            <Input 
+                              value={localStyles.backgroundColor || ''}
+                              onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
+                              className="h-8 pl-8 text-[11px] bg-zinc-900 border-zinc-800 group-hover:border-zinc-700 transition-colors cursor-pointer"
+                              placeholder="Transparent"
+                              readOnly
+                            />
+                          </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-64 bg-zinc-900 border-zinc-800 p-2" align="start">
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-8 gap-1">
+                              {SPECIAL_COLORS.map((c) => (
+                                <button
+                                  key={c.name}
+                                  className="size-6 rounded-md border border-zinc-800 hover:scale-110 transition-transform"
+                                  style={{ backgroundColor: c.hex }}
+                                  onClick={() => handleStyleChange('backgroundColor', c.hex)}
+                                  title={c.name}
+                                />
+                              ))}
+                            </div>
+                            <div className="space-y-1">
+                              {TAILWIND_COLORS.map((family) => (
+                                <div key={family.name} className="flex gap-0.5">
+                                  {family.shades.map((shade) => (
+                                    <button
+                                      key={shade.value}
+                                      className="flex-1 h-4 first:rounded-l-sm last:rounded-r-sm hover:scale-110 hover:z-10 transition-transform"
+                                      style={{ backgroundColor: shade.hex }}
+                                      onClick={() => handleStyleChange('backgroundColor', shade.hex)}
+                                      title={`${family.name}-${shade.value}`}
+                                    />
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="pt-2 border-t border-zinc-800">
+                              <Input 
+                                value={localStyles.backgroundColor || ''}
+                                onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
+                                className="h-7 text-[10px] bg-zinc-950 border-zinc-800"
+                                placeholder="#000000"
+                              />
+                            </div>
+                          </div>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-zinc-500 font-medium">Opacity</Label>
+                    <div className="relative">
+                      <Input 
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={Math.round((parseFloat(localStyles.opacity || '1')) * 100)}
+                        onChange={(e) => handleStyleChange('opacity', (parseInt(e.target.value) / 100).toString())}
+                        className="h-8 pl-2 pr-6 text-[11px] bg-zinc-900 border-zinc-800"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-600">%</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-zinc-500 font-medium">Radius</Label>
+                    <Input 
+                      value={localStyles.borderRadius || ''}
+                      onChange={(e) => handleStyleChange('borderRadius', e.target.value)}
+                      className="h-8 text-[11px] bg-zinc-900 border-zinc-800"
+                      placeholder="0px"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-zinc-500 font-medium">Shadow</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full h-8 justify-between px-2 text-[11px] bg-zinc-900 border-zinc-800">
+                          <span className="truncate">{localStyles.boxShadow ? 'Custom' : 'None'}</span>
+                          <ChevronDownIcon className="size-3 opacity-50" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-40 bg-zinc-900 border-zinc-800">
+                        <DropdownMenuItem onClick={() => handleStyleChange('boxShadow', 'none')} className="text-[11px]">None</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleStyleChange('boxShadow', '0 1px 2px rgba(0,0,0,0.1)')} className="text-[11px]">Small</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleStyleChange('boxShadow', '0 4px 6px rgba(0,0,0,0.1)')} className="text-[11px]">Medium</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleStyleChange('boxShadow', '0 10px 15px rgba(0,0,0,0.1)')} className="text-[11px]">Large</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              </Section>
 
-            <Separator className="bg-zinc-800" />
+              {/* Layout Section */}
+              <Section title="Layout" icon={LayoutDashboardIcon}>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-1">
+                      <Label className="text-[10px] text-zinc-500 font-medium mb-1 block">Display</Label>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" className="w-full h-8 justify-between px-2 text-[11px] bg-zinc-900 border-zinc-800">
+                            <span>{localStyles.display || 'block'}</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-32 bg-zinc-900 border-zinc-800">
+                          {displayOptions.map(d => (
+                            <DropdownMenuItem key={d} onClick={() => handleStyleChange('display', d)} className="text-[11px]">{d}</DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    <div className="col-span-1">
+                      <Label className="text-[10px] text-zinc-500 font-medium mb-1 block">Width</Label>
+                      <Input 
+                        value={localStyles.width || ''}
+                        onChange={(e) => handleStyleChange('width', e.target.value)}
+                        className="h-8 text-[11px] bg-zinc-900 border-zinc-800"
+                        placeholder="auto"
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <Label className="text-[10px] text-zinc-500 font-medium mb-1 block">Height</Label>
+                      <Input 
+                        value={localStyles.height || ''}
+                        onChange={(e) => handleStyleChange('height', e.target.value)}
+                        className="h-8 text-[11px] bg-zinc-900 border-zinc-800"
+                        placeholder="auto"
+                      />
+                    </div>
+                  </div>
 
-            {/* Draggable Preview Canvas */}
-            <div className="flex justify-center">
-              <DraggablePreview
-                position={positionValues}
-                onPositionChange={handlePositionChange}
+                  {/* Flex Controls */}
+                  {localStyles.display === 'flex' && (
+                    <div className="p-2 bg-zinc-900/50 rounded border border-zinc-800/50 space-y-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] text-zinc-500 font-medium">Direction</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            variant={localStyles.flexDirection === 'row' || !localStyles.flexDirection ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => handleStyleChange('flexDirection', 'row')}
+                            className={cn("h-7 text-[10px]", localStyles.flexDirection === 'row' || !localStyles.flexDirection ? "bg-zinc-800 text-blue-400 border-zinc-700" : "bg-zinc-900 border-zinc-800")}
+                          >
+                            <ArrowRightIcon className="size-3 mr-1.5" /> Row
+                          </Button>
+                          <Button
+                            variant={localStyles.flexDirection === 'column' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => handleStyleChange('flexDirection', 'column')}
+                            className={cn("h-7 text-[10px]", localStyles.flexDirection === 'column' ? "bg-zinc-800 text-blue-400 border-zinc-700" : "bg-zinc-900 border-zinc-800")}
+                          >
+                            <ArrowDownIcon className="size-3 mr-1.5" /> Column
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] text-zinc-500 font-medium">Align</Label>
+                          <div className="flex bg-zinc-900 rounded border border-zinc-800 p-0.5">
+                            {[
+                              { v: 'flex-start', i: AlignVerticalJustifyStartIcon },
+                              { v: 'center', i: AlignVerticalJustifyCenterIcon },
+                              { v: 'flex-end', i: AlignVerticalJustifyEndIcon },
+                              { v: 'stretch', i: StretchHorizontalIcon }
+                            ].map(({ v, i: Icon }) => (
+                              <button
+                                key={v}
+                                onClick={() => handleStyleChange('alignItems', v)}
+                                className={cn(
+                                  "flex-1 flex items-center justify-center p-1 rounded hover:bg-zinc-800 transition-colors",
+                                  localStyles.alignItems === v && "bg-zinc-800 text-blue-400"
+                                )}
+                              >
+                                <Icon className="size-3.5" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] text-zinc-500 font-medium">Justify</Label>
+                          <div className="flex bg-zinc-900 rounded border border-zinc-800 p-0.5">
+                            {[
+                              { v: 'flex-start', i: AlignHorizontalJustifyStartIcon },
+                              { v: 'center', i: AlignHorizontalJustifyCenterIcon },
+                              { v: 'flex-end', i: AlignHorizontalJustifyEndIcon },
+                              { v: 'space-between', i: AlignHorizontalSpaceBetweenIcon }
+                            ].map(({ v, i: Icon }) => (
+                              <button
+                                key={v}
+                                onClick={() => handleStyleChange('justifyContent', v)}
+                                className={cn(
+                                  "flex-1 flex items-center justify-center p-1 rounded hover:bg-zinc-800 transition-colors",
+                                  localStyles.justifyContent === v && "bg-zinc-800 text-blue-400"
+                                )}
+                              >
+                                <Icon className="size-3.5" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] text-zinc-500 font-medium">Gap</Label>
+                        <div className="relative">
+                          <MinusIcon className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
+                          <Input 
+                            value={localStyles.gap || ''}
+                            onChange={(e) => handleStyleChange('gap', e.target.value)}
+                            className="h-7 pl-7 text-[11px] bg-zinc-900 border-zinc-800"
+                            placeholder="0px"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4 pt-2">
+                    {/* Padding Control */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px] text-zinc-500 font-medium">Padding</Label>
+                        <Input 
+                          value={localStyles.padding || ''}
+                          onChange={(e) => handleStyleChange('padding', e.target.value)}
+                          className="h-5 w-12 text-[9px] bg-zinc-900 border-zinc-800 text-center px-1 focus:border-blue-500/50"
+                          placeholder="All"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-1 p-1.5 bg-zinc-900/30 rounded border border-zinc-800/50">
+                        <div />
+                        <Input 
+                          value={localStyles.paddingTop || ''}
+                          onChange={(e) => handleStyleChange('paddingTop', e.target.value)}
+                          className="h-6 text-[9px] bg-zinc-900 border-zinc-800 text-center px-0 focus:border-blue-500/50 focus:z-10"
+                          placeholder="T"
+                        />
+                        <div />
+                        <Input 
+                          value={localStyles.paddingLeft || ''}
+                          onChange={(e) => handleStyleChange('paddingLeft', e.target.value)}
+                          className="h-6 text-[9px] bg-zinc-900 border-zinc-800 text-center px-0 focus:border-blue-500/50 focus:z-10"
+                          placeholder="L"
+                        />
+                        <div className="flex items-center justify-center">
+                          <div className="size-1 rounded-full bg-zinc-700" />
+                        </div>
+                        <Input 
+                          value={localStyles.paddingRight || ''}
+                          onChange={(e) => handleStyleChange('paddingRight', e.target.value)}
+                          className="h-6 text-[9px] bg-zinc-900 border-zinc-800 text-center px-0 focus:border-blue-500/50 focus:z-10"
+                          placeholder="R"
+                        />
+                        <div />
+                        <Input 
+                          value={localStyles.paddingBottom || ''}
+                          onChange={(e) => handleStyleChange('paddingBottom', e.target.value)}
+                          className="h-6 text-[9px] bg-zinc-900 border-zinc-800 text-center px-0 focus:border-blue-500/50 focus:z-10"
+                          placeholder="B"
+                        />
+                        <div />
+                      </div>
+                    </div>
+
+                    {/* Margin Control */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px] text-zinc-500 font-medium">Margin</Label>
+                        <Input 
+                          value={localStyles.margin || ''}
+                          onChange={(e) => handleStyleChange('margin', e.target.value)}
+                          className="h-5 w-12 text-[9px] bg-zinc-900 border-zinc-800 text-center px-1 focus:border-blue-500/50"
+                          placeholder="All"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-1 p-1.5 bg-zinc-900/30 rounded border border-zinc-800/50">
+                        <div />
+                        <Input 
+                          value={localStyles.marginTop || ''}
+                          onChange={(e) => handleStyleChange('marginTop', e.target.value)}
+                          className="h-6 text-[9px] bg-zinc-900 border-zinc-800 text-center px-0 focus:border-blue-500/50 focus:z-10"
+                          placeholder="T"
+                        />
+                        <div />
+                        <Input 
+                          value={localStyles.marginLeft || ''}
+                          onChange={(e) => handleStyleChange('marginLeft', e.target.value)}
+                          className="h-6 text-[9px] bg-zinc-900 border-zinc-800 text-center px-0 focus:border-blue-500/50 focus:z-10"
+                          placeholder="L"
+                        />
+                        <div className="flex items-center justify-center">
+                          <div className="size-2 border border-zinc-700 rounded-[1px]" />
+                        </div>
+                        <Input 
+                          value={localStyles.marginRight || ''}
+                          onChange={(e) => handleStyleChange('marginRight', e.target.value)}
+                          className="h-6 text-[9px] bg-zinc-900 border-zinc-800 text-center px-0 focus:border-blue-500/50 focus:z-10"
+                          placeholder="R"
+                        />
+                        <div />
+                        <Input 
+                          value={localStyles.marginBottom || ''}
+                          onChange={(e) => handleStyleChange('marginBottom', e.target.value)}
+                          className="h-6 text-[9px] bg-zinc-900 border-zinc-800 text-center px-0 focus:border-blue-500/50 focus:z-10"
+                          placeholder="B"
+                        />
+                        <div />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Section>
+
+              {/* Content Section */}
+              <Section title="Content" icon={CodeIcon}>
+                <textarea
+                  value={localText}
+                  onChange={(e) => {
+                    setLocalText(e.target.value);
+                    setHasChanges(true);
+                  }}
+                  onBlur={() => {
+                    if (element && localText !== element.textContent) {
+                      onTextChange(element.selector, localText);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                      e.preventDefault();
+                      if (element) {
+                        onTextChange(element.selector, localText);
+                      }
+                    }
+                  }}
+                  placeholder="Enter text content..."
+                  className="w-full h-24 p-3 text-[11px] font-mono bg-zinc-900 border border-zinc-800 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                />
+                <div className="flex items-center justify-between text-[9px] text-zinc-500 px-1">
+                  <span>{localText.length} characters</span>
+                  <span>⌘+Enter to apply</span>
+                </div>
+              </Section>
+
+            </TabsContent>
+
+            <TabsContent value="position" className="m-0 space-y-4 outline-none">
+              <PositionModeSelector
+                value={positionMode}
+                onChange={setPositionMode}
+              />
+              <div className="flex justify-center py-4 bg-zinc-900/50 rounded-lg border border-zinc-800/50">
+                <DraggablePreview
+                  position={positionValues}
+                  onPositionChange={handlePositionChange}
+                  mode={positionMode}
+                  gridSize={gridSize}
+                  showGrid={true}
+                />
+              </div>
+              <PositionControls
+                values={positionValues}
+                onChange={handlePositionChange}
                 mode={positionMode}
                 gridSize={gridSize}
-                showGrid={true}
               />
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Position Controls */}
-            <PositionControls
-              values={positionValues}
-              onChange={handlePositionChange}
-              mode={positionMode}
-              gridSize={gridSize}
-            />
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Grid Size Selector */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
-                  <GridIcon className="size-3" />
-                  Grid Size
-                </Label>
+              <div className="space-y-2">
+                <Label className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Grid Size</Label>
+                <div className="flex gap-1">
+                  {GRID_SIZES.map(size => (
+                    <Button
+                      key={size}
+                      variant={gridSize === size ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setGridSize(size)}
+                      className={cn(
+                        "h-6 px-0 flex-1 text-[10px]",
+                        gridSize === size ? "bg-blue-600 hover:bg-blue-700" : "bg-zinc-900 border-zinc-800"
+                      )}
+                    >
+                      {size}
+                    </Button>
+                  ))}
+                </div>
               </div>
-              <div className="flex gap-1">
-                {GRID_SIZES.map(size => (
+            </TabsContent>
+
+            <TabsContent value="export" className="m-0 space-y-4 outline-none">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Tailwind Classes</Label>
                   <Button
-                    key={size}
-                    variant={gridSize === size ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setGridSize(size)}
-                    className="h-6 px-2 text-[11px] flex-1"
-                  >
-                    {size}px
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {/* Tailwind Output */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400">Generated Classes</Label>
-              <div className="flex items-center gap-2 bg-zinc-800/50 rounded-md p-2">
-                <code className="text-[11px] text-emerald-400 font-mono flex-1 truncate">
-                  {positionToTailwind(positionMode, positionValues).classes.join(' ') || 'No classes'}
-                </code>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0"
-                  onClick={() => {
-                    const classes = positionToTailwind(positionMode, positionValues).classes.join(' ');
-                    navigator.clipboard.writeText(classes);
-                  }}
-                >
-                  <CopyIcon className="size-3" />
-                </Button>
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* Export Tab - CSS to Tailwind */}
-          <TabsContent value="export" className="m-0 p-2.5 space-y-2.5">
-            {/* Tailwind Classes Preview */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-[11px] text-zinc-400">Tailwind Classes</Label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={async () => {
-                    await navigator.clipboard.writeText(tailwindResult.classes.join(' '));
-                    setCopiedTailwind(true);
-                    setTimeout(() => setCopiedTailwind(false), 2000);
-                  }}
-                  className="h-6 px-2 text-xs"
-                >
-                  {copiedTailwind ? (
-                    <CheckIcon className="size-3 mr-1 text-green-500" />
-                  ) : (
-                    <CopyIcon className="size-3 mr-1" />
-                  )}
-                  {copiedTailwind ? 'Copied!' : 'Copy'}
-                </Button>
-              </div>
-              <div className="p-3 bg-zinc-800 rounded-md font-mono text-[11px] text-emerald-400 break-all">
-                {tailwindResult.classes.length > 0 
-                  ? tailwindResult.classes.join(' ')
-                  : <span className="text-zinc-500 italic">No styles to convert</span>
-                }
-              </div>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Merged with existing classes */}
-            {element.className && (
-              <>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] text-zinc-400">Merged with Existing Classes</Label>
-                  <div className="p-3 bg-zinc-800 rounded-md font-mono text-[11px] text-blue-400 break-all">
-                    {mergedClasses}
-                  </div>
-                  <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     onClick={async () => {
-                      await navigator.clipboard.writeText(`className="${mergedClasses}"`);
+                      await navigator.clipboard.writeText(tailwindResult.classes.join(' '));
                       setCopiedTailwind(true);
                       setTimeout(() => setCopiedTailwind(false), 2000);
                     }}
-                    className="w-full h-7 text-xs"
+                    className="h-5 px-2 text-[10px] hover:bg-zinc-800"
                   >
-                    <CopyIcon className="size-3 mr-1" />
-                    Copy Merged className
+                    {copiedTailwind ? <CheckIcon className="size-3 mr-1 text-emerald-500" /> : <CopyIcon className="size-3 mr-1" />}
+                    {copiedTailwind ? 'Copied' : 'Copy'}
                   </Button>
                 </div>
-                <Separator className="bg-zinc-800" />
-              </>
-            )}
-
-            {/* Conversion Details */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-zinc-400">Conversion Details</Label>
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {tailwindResult.conversions.map((conv, idx) => (
-                  <div 
-                    key={idx}
-                    className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded text-xs"
-                  >
-                    {conv.exact ? (
-                      <CheckCircleIcon className="size-3 text-green-500 shrink-0" />
-                    ) : (
-                      <AlertCircleIcon className="size-3 text-amber-500 shrink-0" />
-                    )}
-                    <span className="text-zinc-500 truncate">{conv.property}:</span>
-                    <span className="text-zinc-400 truncate">{conv.originalValue}</span>
-                    <span className="text-zinc-600">→</span>
-                    <span className="text-emerald-400 font-mono truncate">{conv.tailwindClass}</span>
-                  </div>
-                ))}
-                {tailwindResult.conversions.length === 0 && (
-                  <div className="text-[11px] text-zinc-500 italic p-2">
-                    No inline styles to convert
-                  </div>
-                )}
+                <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-md font-mono text-[11px] text-emerald-400 break-all leading-relaxed">
+                  {tailwindResult.classes.length > 0 
+                    ? tailwindResult.classes.join(' ')
+                    : <span className="text-zinc-600 italic">No styles to convert</span>
+                  }
+                </div>
               </div>
-            </div>
 
-            {/* Unconverted properties */}
-            {tailwindResult.unconverted.length > 0 && (
-              <>
-                <Separator className="bg-zinc-800" />
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] text-amber-400">⚠️ Not Converted</Label>
-                  <div className="space-y-1">
-                    {tailwindResult.unconverted.map((item, idx) => (
-                      <div 
-                        key={idx}
-                        className="flex items-center gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs"
-                      >
-                        <span className="text-zinc-400">{item.property}:</span>
-                        <span className="text-zinc-300 font-mono truncate">{item.value}</span>
-                      </div>
-                    ))}
+              {element.className && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Merged Classes</Label>
+                  <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-md font-mono text-[11px] text-blue-400 break-all leading-relaxed">
+                    {mergedClasses}
                   </div>
                 </div>
-              </>
-            )}
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Stats */}
-            <div className="flex items-center gap-4 text-[11px] text-zinc-500">
-              <div className="flex items-center gap-1">
-                <CheckCircleIcon className="size-3 text-green-500" />
-                <span>{tailwindResult.conversions.filter(c => c.exact).length} exact</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <AlertCircleIcon className="size-3 text-amber-500" />
-                <span>{tailwindResult.conversions.filter(c => !c.exact).length} approximate</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-zinc-600">{tailwindResult.unconverted.length} skipped</span>
-              </div>
-            </div>
-          </TabsContent>
-        </div>
+              )}
+            </TabsContent>
+          </div>
+        </ScrollArea>
       </Tabs>
 
-      {/* Fixed bottom action bar */}
+      {/* Bottom Bar */}
       {hasChanges && (
-        <div className="shrink-0 border-t border-zinc-800 bg-zinc-900/95 backdrop-blur-sm px-3 py-2">
+        <div className="shrink-0 border-t border-zinc-800 bg-zinc-900/95 backdrop-blur-sm px-3 py-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-[11px] text-zinc-500">
-              <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
-              <span>Unsaved</span>
+              <div className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+              <span className="font-medium">Unsaved changes</span>
             </div>
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleReset}
-                className="h-7 px-2 text-[11px] text-zinc-400"
+                className="h-7 px-3 text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
               >
-                <RotateCcwIcon className="size-3" />
+                <RotateCcwIcon className="size-3 mr-1.5" />
+                Reset
               </Button>
               <Button
                 variant="default"
@@ -1696,18 +1281,18 @@ export function ElementEditor({
                 onClick={handleApplyToCode}
                 disabled={isSaving}
                 className={cn(
-                  "h-7 px-3 text-[11px] text-white font-medium",
+                  "h-7 px-4 text-[11px] text-white font-medium shadow-sm transition-all",
                   saveAsTailwind 
-                    ? "bg-emerald-600 hover:bg-emerald-700" 
-                    : "bg-blue-600 hover:bg-blue-700"
+                    ? "bg-emerald-600 hover:bg-emerald-500 hover:shadow-emerald-500/20" 
+                    : "bg-blue-600 hover:bg-blue-500 hover:shadow-blue-500/20"
                 )}
               >
                 {isSaving ? (
                   <CheckIcon className="size-3 animate-pulse" />
                 ) : (
                   <>
-                    <SaveIcon className="size-3 mr-1" />
-                    Save
+                    <SaveIcon className="size-3 mr-1.5" />
+                    Save Changes
                   </>
                 )}
               </Button>
