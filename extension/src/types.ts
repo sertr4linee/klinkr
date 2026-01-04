@@ -57,7 +57,9 @@ export interface WebSocketMessage {
     // MCP servers
     | 'detectMCPServers' | 'mcpServersDetected'
     // Element editing - apply changes to source code
-    | 'applyElementChanges' | 'elementChangesApplied' | 'elementChangesError' | 'fileModified';
+    | 'applyElementChanges' | 'elementChangesApplied' | 'elementChangesError' | 'fileModified'
+    // REALM Protocol
+    | 'realm_event';
   payload?: any;
   requestId?: string;
 }

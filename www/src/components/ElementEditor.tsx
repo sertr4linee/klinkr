@@ -22,7 +22,37 @@ import {
   MoveIcon,
   GridIcon,
   PaletteIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  BlendIcon,
+  SquareIcon,
+  CircleDotIcon,
+  CaseSensitiveIcon,
+  BoldIcon,
+  LineChartIcon,
+  AlignLeftIcon,
+  AlignCenterIcon,
+  AlignRightIcon,
+  AlignJustifyIcon,
+  LayoutDashboardIcon,
+  RectangleHorizontalIcon,
+  RectangleVerticalIcon,
+  SquareDashedBottomIcon,
+  FrameIcon,
+  ArrowRightIcon,
+  ArrowDownIcon,
+  AlignHorizontalJustifyStartIcon,
+  AlignHorizontalJustifyCenterIcon,
+  AlignHorizontalJustifyEndIcon,
+  AlignHorizontalSpaceBetweenIcon,
+  AlignHorizontalSpaceAroundIcon,
+  AlignVerticalJustifyStartIcon,
+  AlignVerticalJustifyCenterIcon,
+  AlignVerticalJustifyEndIcon,
+  StretchHorizontalIcon,
+  MinusIcon,
+  UnfoldHorizontalIcon,
+  UnfoldVerticalIcon,
+  LockIcon
 } from 'lucide-react';
 import { 
   DropdownMenu,
@@ -460,7 +490,7 @@ export function ElementEditor({
       <div className={cn("flex flex-col items-center justify-center h-full text-zinc-500", className)}>
         <BoxIcon className="size-12 mb-3 opacity-30" />
         <p className="text-sm">Select an element to edit</p>
-        <p className="text-xs opacity-50 mt-1">Click on any element in the preview</p>
+        <p className="text-[11px] opacity-50 mt-1">Click on any element in the preview</p>
       </div>
     );
   }
@@ -468,13 +498,13 @@ export function ElementEditor({
   return (
     <div className={cn("flex flex-col h-full max-h-screen bg-zinc-900", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 shrink-0">
+      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-zinc-800 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-mono text-blue-400 truncate">
+          <span className="text-[11px] font-mono text-blue-400 truncate">
             &lt;{element.tagName}&gt;
           </span>
           {element.id && (
-            <span className="text-xs text-zinc-500">#{element.id}</span>
+            <span className="text-[10px] text-zinc-500">#{element.id}</span>
           )}
         </div>
         {/* Tailwind mode toggle - always visible */}
@@ -495,24 +525,16 @@ export function ElementEditor({
 
       {/* Tabs */}
       <Tabs defaultValue="styles" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="w-full justify-start rounded-none border-b border-zinc-800 bg-transparent h-9 shrink-0 overflow-x-auto">
-          <TabsTrigger value="styles" className="text-xs data-[state=active]:bg-zinc-800">
+        <TabsList className="w-full justify-start rounded-none border-b border-zinc-800 bg-transparent h-8 shrink-0 overflow-x-auto">
+          <TabsTrigger value="styles" className="text-[11px] py-1 data-[state=active]:bg-zinc-800">
             <PaintbrushIcon className="size-3 mr-1" />
             Styles
           </TabsTrigger>
-          <TabsTrigger value="position" className="text-xs data-[state=active]:bg-zinc-800">
+          <TabsTrigger value="position" className="text-[11px] py-1 data-[state=active]:bg-zinc-800">
             <MoveIcon className="size-3 mr-1" />
             Position
           </TabsTrigger>
-          <TabsTrigger value="layout" className="text-xs data-[state=active]:bg-zinc-800">
-            <BoxIcon className="size-3 mr-1" />
-            Layout
-          </TabsTrigger>
-          <TabsTrigger value="text" className="text-xs data-[state=active]:bg-zinc-800">
-            <TypeIcon className="size-3 mr-1" />
-            Text
-          </TabsTrigger>
-          <TabsTrigger value="export" className="text-xs data-[state=active]:bg-zinc-800">
+          <TabsTrigger value="export" className="text-[11px] py-1 data-[state=active]:bg-zinc-800">
             <SparklesIcon className="size-3 mr-1" />
             Export
           </TabsTrigger>
@@ -520,23 +542,23 @@ export function ElementEditor({
 
         <div className="flex-1 overflow-y-auto min-h-0">
           {/* Styles Tab */}
-          <TabsContent value="styles" className="m-0 p-3 space-y-4">
+          <TabsContent value="styles" className="m-0 p-2.5 space-y-3">
             {/* Colors */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Background Color</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400">Background Color</Label>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="w-full flex items-center justify-between h-10 px-3 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
-                    <div className="flex items-center gap-2">
+                  <button className="w-full flex items-center justify-between h-8 px-2.5 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
+                    <div className="flex items-center gap-1.5">
                       <div 
-                        className="size-5 rounded border border-zinc-600"
+                        className="size-3.5 rounded border border-zinc-600"
                         style={{ backgroundColor: localStyles.backgroundColor || 'transparent' }}
                       />
-                      <span className="text-xs text-zinc-300 font-mono">
+                      <span className="text-[11px] text-zinc-300 font-mono">
                         {localStyles.backgroundColor || 'Select color'}
                       </span>
                     </div>
-                    <PaletteIcon className="size-4 text-zinc-500" />
+                    <PaletteIcon className="size-3.5 text-zinc-500" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-80 max-h-[500px] overflow-y-auto bg-zinc-900 border-zinc-800">
@@ -546,19 +568,19 @@ export function ElementEditor({
                       value={localStyles.backgroundColor || ''}
                       onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
                       placeholder="#hex or rgb() or transparent"
-                      className="h-8 text-xs font-mono bg-zinc-800 border-zinc-700"
+                      className="h-7 text-[11px] font-mono bg-zinc-800 border-zinc-700"
                       onClick={(e) => e.stopPropagation()}
                     />
                   </div>
                   
                   <div className="p-2">
-                    <DropdownMenuLabel className="text-zinc-400 text-xs mb-2">Quick Colors</DropdownMenuLabel>
+                    <DropdownMenuLabel className="text-zinc-400 text-[11px] mb-1.5">Quick Colors</DropdownMenuLabel>
                     <div className="grid grid-cols-8 gap-1.5 mb-3">
                       {SPECIAL_COLORS.map((color) => (
                         <button
                           key={color.tailwindClass}
                           onClick={() => handleStyleChange('backgroundColor', color.hex)}
-                          className="size-8 rounded border-2 border-zinc-700 hover:border-blue-500 hover:scale-110 transition-all"
+                          className="size-7 rounded border-2 border-zinc-700 hover:border-blue-500 hover:scale-110 transition-all"
                           style={{ backgroundColor: color.hex }}
                           title={color.name}
                         />
@@ -567,7 +589,7 @@ export function ElementEditor({
                         <button
                           key={color}
                           onClick={() => handleStyleChange('backgroundColor', color)}
-                          className="size-8 rounded border-2 border-zinc-700 hover:border-blue-500 hover:scale-110 transition-all"
+                          className="size-7 rounded border-2 border-zinc-700 hover:border-blue-500 hover:scale-110 transition-all"
                           style={{ backgroundColor: color }}
                         />
                       ))}
@@ -606,21 +628,21 @@ export function ElementEditor({
             <Separator className="bg-zinc-800" />
 
             {/* Text Color */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Text Color</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400">Text Color</Label>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="w-full flex items-center justify-between h-10 px-3 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
+                  <button className="w-full flex items-center justify-between h-8 px-2.5 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
                     <div className="flex items-center gap-2">
                       <div 
-                        className="size-5 rounded border border-zinc-600"
+                        className="size-4 rounded border border-zinc-600"
                         style={{ backgroundColor: localStyles.color || 'transparent' }}
                       />
-                      <span className="text-xs text-zinc-300 font-mono">
+                      <span className="text-[11px] text-zinc-300 font-mono">
                         {localStyles.color || 'Select color'}
                       </span>
                     </div>
-                    <PaletteIcon className="size-4 text-zinc-500" />
+                    <PaletteIcon className="size-3.5 text-zinc-500" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-80 max-h-[500px] overflow-y-auto bg-zinc-900 border-zinc-800">
@@ -630,13 +652,13 @@ export function ElementEditor({
                       value={localStyles.color || ''}
                       onChange={(e) => handleStyleChange('color', e.target.value)}
                       placeholder="#hex or rgb() or inherit"
-                      className="h-8 text-xs font-mono bg-zinc-800 border-zinc-700"
+                      className="h-7 text-[11px] font-mono bg-zinc-800 border-zinc-700"
                       onClick={(e) => e.stopPropagation()}
                     />
                   </div>
                   
                   <div className="p-2">
-                    <DropdownMenuLabel className="text-zinc-400 text-xs mb-2">Quick Colors</DropdownMenuLabel>
+                    <DropdownMenuLabel className="text-zinc-400 text-[11px] mb-2">Quick Colors</DropdownMenuLabel>
                     <div className="grid grid-cols-8 gap-1.5 mb-3">
                       {SPECIAL_COLORS.map((color) => (
                         <button
@@ -689,100 +711,31 @@ export function ElementEditor({
 
             <Separator className="bg-zinc-800" />
 
-            {/* Border Radius */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Radius</Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="w-full flex items-center justify-between h-10 px-3 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
-                    <div className="flex items-center gap-2">
-                      <div className="size-5 rounded-md border border-zinc-600" style={{ borderRadius: localStyles.borderRadius || '0' }} />
-                      <span className="text-xs text-zinc-300">
-                        {localStyles.borderRadius === '0' || localStyles.borderRadius === '0px' ? 'None' :
-                         localStyles.borderRadius === '2px' ? 'Extra Small' :
-                         localStyles.borderRadius === '4px' ? 'Small' :
-                         localStyles.borderRadius === '8px' ? 'Medium' :
-                         localStyles.borderRadius === '12px' || localStyles.borderRadius === '0.75rem' ? 'Large' :
-                         localStyles.borderRadius === '16px' || localStyles.borderRadius === '1rem' ? 'Extra Large' :
-                         localStyles.borderRadius === '24px' || localStyles.borderRadius === '1.5rem' ? 'Double Extra Large' :
-                         localStyles.borderRadius === '32px' || localStyles.borderRadius === '2rem' ? 'Triple Extra Large' :
-                         localStyles.borderRadius === '48px' || localStyles.borderRadius === '3rem' ? 'Quadruple Extra Large' :
-                         localStyles.borderRadius === '9999px' || localStyles.borderRadius === '50%' ? 'Full' :
-                         localStyles.borderRadius || 'Select'}
-                      </span>
-                    </div>
-                    <ChevronDownIcon className="size-4 text-zinc-500" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-64 bg-zinc-900 border-zinc-800">
-                  {[
-                    { label: 'None', value: '0' },
-                    { label: 'Extra Small', value: '2px' },
-                    { label: 'Small', value: '4px' },
-                    { label: 'Medium', value: '8px' },
-                    { label: 'Large', value: '12px' },
-                    { label: 'Extra Large', value: '16px' },
-                    { label: 'Double Extra Large', value: '24px' },
-                    { label: 'Triple Extra Large', value: '32px' },
-                    { label: 'Quadruple Extra Large', value: '48px' },
-                    { label: 'Full', value: '9999px' },
-                  ].map(({ label, value }) => (
-                    <DropdownMenuItem
-                      key={value}
-                      onClick={() => handleStyleChange('borderRadius', value)}
-                      className="flex items-center gap-3 cursor-pointer py-2"
-                    >
-                      <div className="size-5 rounded border border-zinc-600 bg-zinc-800" style={{ borderRadius: value }} />
-                      <span className="text-xs flex-1">{label}</span>
-                      {localStyles.borderRadius === value && <CheckIcon className="size-4 text-blue-500" />}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Box Shadow */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Box Shadow</Label>
-              <Input
-                type="text"
-                value={localStyles.boxShadow || ''}
-                onChange={(e) => handleStyleChange('boxShadow', e.target.value)}
-                placeholder="none"
-                className="h-8 text-xs font-mono"
-              />
-              <div className="flex gap-1 flex-wrap">
-                {[
-                  { label: 'None', value: 'none' },
-                  { label: 'SM', value: '0 1px 2px rgba(0,0,0,0.1)' },
-                  { label: 'MD', value: '0 4px 6px rgba(0,0,0,0.1)' },
-                  { label: 'LG', value: '0 10px 15px rgba(0,0,0,0.1)' },
-                ].map(({ label, value }) => (
-                  <Button
-                    key={label}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleStyleChange('boxShadow', value)}
-                    className="h-6 px-2 text-xs"
-                  >
-                    {label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Opacity */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs text-zinc-400">Opacity</Label>
-                <div className="flex items-center gap-2 px-3 h-8 rounded-md bg-zinc-800 border border-zinc-700">
-                  <div className="size-4 rounded-full" style={{ 
-                    background: `radial-gradient(circle, rgba(255,255,255,${localStyles.opacity || 1}) 0%, rgba(255,255,255,${(parseFloat(localStyles.opacity || '1') * 0.5).toFixed(2)}) 100%)` 
-                  }} />
+            {/* Opacity & Radius - Side by Side */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Opacity */}
+              <div className="space-y-1.5">
+                <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                  <BlendIcon className="size-3" />
+                  Opacity
+                </Label>
+                <div className="relative flex items-center gap-2 h-8 px-2.5 rounded-md bg-zinc-800 border border-zinc-700 hover:border-zinc-600 transition-colors group">
+                  {/* Checkerboard background pattern */}
+                  <div className="size-3.5 rounded overflow-hidden relative flex-shrink-0">
+                    <div className="absolute inset-0" style={{
+                      backgroundImage: `
+                        linear-gradient(45deg, #404040 25%, transparent 25%),
+                        linear-gradient(-45deg, #404040 25%, transparent 25%),
+                        linear-gradient(45deg, transparent 75%, #404040 75%),
+                        linear-gradient(-45deg, transparent 75%, #404040 75%)
+                      `,
+                      backgroundSize: '6px 6px',
+                      backgroundPosition: '0 0, 0 3px, 3px -3px, -3px 0px'
+                    }} />
+                    <div className="absolute inset-0 bg-blue-500 rounded" style={{ 
+                      opacity: parseFloat(localStyles.opacity || '1')
+                    }} />
+                  </div>
                   <Input
                     type="number"
                     min="0"
@@ -792,25 +745,729 @@ export function ElementEditor({
                       const percentage = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
                       handleStyleChange('opacity', (percentage / 100).toString());
                     }}
-                    className="h-6 w-12 px-1 text-xs text-right bg-transparent border-0 focus:ring-0"
+                    className="h-6 w-full px-1 text-[11px] text-right bg-transparent border-0 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                   />
-                  <span className="text-xs text-zinc-500">%</span>
+                  <span className="text-[11px] text-zinc-500 flex-shrink-0">%</span>
                 </div>
               </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={Math.round((parseFloat(localStyles.opacity || '1')) * 100)}
-                onChange={(e) => handleStyleChange('opacity', (parseInt(e.target.value) / 100).toString())}
-                className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
-              />
+
+              {/* Border Radius */}
+              <div className="space-y-1.5">
+                <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                  <SquareIcon className="size-3" />
+                  Radius
+                </Label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="w-full flex items-center justify-between h-8 px-2.5 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
+                      <div className="flex items-center gap-1.5">
+                        <SquareIcon className="size-3.5 text-zinc-500" />
+                        <div className="size-3.5 rounded-md border border-zinc-600" style={{ borderRadius: localStyles.borderRadius || '0' }} />
+                        <span className="text-[11px] text-zinc-300">
+                          {localStyles.borderRadius === '0' || localStyles.borderRadius === '0px' || !localStyles.borderRadius ? 'None' :
+                           localStyles.borderRadius === '2px' ? 'Extra Small' :
+                           localStyles.borderRadius === '4px' ? 'Small' :
+                           localStyles.borderRadius === '8px' ? 'Medium' :
+                           localStyles.borderRadius === '12px' || localStyles.borderRadius === '0.75rem' ? 'Large' :
+                           localStyles.borderRadius === '16px' || localStyles.borderRadius === '1rem' ? 'Extra Large' :
+                           localStyles.borderRadius === '24px' || localStyles.borderRadius === '1.5rem' ? 'Double Extra Large' :
+                           localStyles.borderRadius === '32px' || localStyles.borderRadius === '2rem' ? 'Triple Extra Large' :
+                           localStyles.borderRadius === '48px' || localStyles.borderRadius === '3rem' ? 'Quadruple Extra Large' :
+                           localStyles.borderRadius === '9999px' || localStyles.borderRadius === '50%' ? 'Full' :
+                           localStyles.borderRadius}
+                        </span>
+                      </div>
+                      <ChevronDownIcon className="size-3.5 text-zinc-500" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-64 bg-zinc-900 border-zinc-800">
+                    {[
+                      { label: 'None', value: '0' },
+                      { label: 'Extra Small', value: '2px' },
+                      { label: 'Small', value: '4px' },
+                      { label: 'Medium', value: '8px' },
+                      { label: 'Large', value: '12px' },
+                      { label: 'Extra Large', value: '16px' },
+                      { label: 'Double Extra Large', value: '24px' },
+                      { label: 'Triple Extra Large', value: '32px' },
+                      { label: 'Quadruple Extra Large', value: '48px' },
+                      { label: 'Full', value: '9999px' },
+                    ].map(({ label, value }) => (
+                      <DropdownMenuItem
+                        key={value}
+                        onClick={() => handleStyleChange('borderRadius', value)}
+                        className="flex items-center gap-3 cursor-pointer py-2"
+                      >
+                        <div className="size-4 rounded border border-zinc-600 bg-zinc-800" style={{ borderRadius: value }} />
+                        <span className="text-[11px] flex-1">{label}</span>
+                        {(localStyles.borderRadius === value || (value === '0' && (!localStyles.borderRadius || localStyles.borderRadius === '0px'))) && <CheckIcon className="size-3.5 text-blue-500" />}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
+
+            <Separator className="bg-zinc-800" />
+
+            {/* Box Shadow */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                <CircleDotIcon className="size-3" />
+                Shadow
+              </Label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="w-full flex items-center justify-between h-8 px-2.5 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-750 hover:border-zinc-600 transition-colors">
+                    <div className="flex items-center gap-1.5">
+                      <CircleDotIcon className="size-3.5 text-zinc-500" />
+                      <div className="size-3.5 rounded border border-zinc-600 bg-zinc-700" style={{ 
+                        boxShadow: localStyles.boxShadow || 'none'
+                      }} />
+                      <span className="text-[11px] text-zinc-300">
+                        {localStyles.boxShadow === 'none' || !localStyles.boxShadow ? 'None' :
+                         localStyles.boxShadow === '0 1px 2px rgba(0,0,0,0.1)' ? 'Small' :
+                         localStyles.boxShadow === '0 4px 6px rgba(0,0,0,0.1)' ? 'Medium' :
+                         localStyles.boxShadow === '0 10px 15px rgba(0,0,0,0.1)' ? 'Large' :
+                         localStyles.boxShadow === '0 20px 25px rgba(0,0,0,0.15)' ? 'Extra Large' :
+                         'Custom'}
+                      </span>
+                    </div>
+                    <ChevronDownIcon className="size-3.5 text-zinc-500" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-64 bg-zinc-900 border-zinc-800">
+                  {[
+                    { label: 'None', value: 'none' },
+                    { label: 'Small', value: '0 1px 2px rgba(0,0,0,0.1)' },
+                    { label: 'Medium', value: '0 4px 6px rgba(0,0,0,0.1)' },
+                    { label: 'Large', value: '0 10px 15px rgba(0,0,0,0.1)' },
+                    { label: 'Extra Large', value: '0 20px 25px rgba(0,0,0,0.15)' },
+                  ].map(({ label, value }) => (
+                    <DropdownMenuItem
+                      key={value}
+                      onClick={() => handleStyleChange('boxShadow', value)}
+                      className="flex items-center gap-3 cursor-pointer py-2"
+                    >
+                      <div className="size-4 rounded border border-zinc-600 bg-zinc-700" style={{ boxShadow: value }} />
+                      <span className="text-[11px] flex-1">{label}</span>
+                      {localStyles.boxShadow === value && <CheckIcon className="size-3.5 text-blue-500" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            <Separator className="bg-zinc-800" />
+
+            {/* TEXT CONTENT */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400">Text Content</Label>
+              
+              {/* Warning for complex elements */}
+              {element.isComplexText && (
+                <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-md text-[11px] text-amber-300">
+                  <p className="font-medium">⚠️ Complex element</p>
+                  <p className="opacity-80 mt-1">
+                    This element contains {element.childCount} child element(s). 
+                    Text changes will only affect direct text content, not nested elements.
+                  </p>
+                </div>
+              )}
+              
+              {/* Show different text representations */}
+              {element.isComplexText && element.directTextContent && (
+                <div className="space-y-1">
+                  <span className="text-[10px] text-zinc-500">Direct text only:</span>
+                  <div className="p-2 bg-zinc-800/50 rounded text-[11px] font-mono text-zinc-300 max-h-16 overflow-auto">
+                    {element.directTextContent || '(no direct text)'}
+                  </div>
+                </div>
+              )}
+              
+              <textarea
+                value={localText}
+                onChange={(e) => {
+                  setLocalText(e.target.value);
+                  setHasChanges(true);
+                }}
+                onBlur={() => {
+                  if (element && localText !== element.textContent) {
+                    console.log('[ElementEditor] Applying text on blur:', element.selector);
+                    onTextChange(element.selector, localText);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    if (element) {
+                      onTextChange(element.selector, localText);
+                    }
+                  }
+                }}
+                placeholder="Enter text..."
+                className="w-full h-20 p-2 text-[11px] font-mono bg-zinc-800 border border-zinc-700 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <p className="text-[10px] text-zinc-600">Press ⌘+Enter to preview • Changes auto-apply</p>
+            </div>
+
+            <Separator className="bg-zinc-800" />
+
+            {/* TYPOGRAPHY */}
+            {/* Font Size */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                <CaseSensitiveIcon className="size-3" />
+                Font Size
+              </Label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full h-8 px-2.5 justify-between text-[11px] font-mono"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <CaseSensitiveIcon className="size-3" />
+                      <span style={{ fontSize: localStyles.fontSize || '14px' }}>
+                        Aa
+                      </span>
+                    </span>
+                    <span className="text-zinc-500">
+                      {localStyles.fontSize || 'inherit'}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  {[
+                    { label: 'Extra Small', value: '12px' },
+                    { label: 'Small', value: '14px' },
+                    { label: 'Base', value: '16px' },
+                    { label: 'Large', value: '18px' },
+                    { label: 'Extra Large', value: '20px' },
+                    { label: '2XL', value: '24px' },
+                    { label: '3XL', value: '32px' },
+                    { label: '4XL', value: '48px' }
+                  ].map(({ label, value }) => (
+                    <DropdownMenuItem
+                      key={value}
+                      onClick={() => handleStyleChange('fontSize', value)}
+                      className="flex items-center justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span 
+                          className="flex items-center justify-center w-12 h-6 bg-zinc-800 rounded"
+                          style={{ fontSize: value }}
+                        >
+                          Aa
+                        </span>
+                        <span className="text-[11px]">{label}</span>
+                      </span>
+                      <span className="text-[10px] text-zinc-500">{value}</span>
+                      {localStyles.fontSize === value && (
+                        <CheckIcon className="size-3 ml-2" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Font Weight */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                <BoldIcon className="size-3" />
+                Font Weight
+              </Label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full h-8 px-2.5 justify-between text-[11px] font-mono"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <BoldIcon className="size-3" />
+                      <span style={{ fontWeight: localStyles.fontWeight || '400' }}>
+                        Aa
+                      </span>
+                    </span>
+                    <span className="text-zinc-500">
+                      {localStyles.fontWeight || '400'}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  {[
+                    { label: 'Normal', value: '400' },
+                    { label: 'Medium', value: '500' },
+                    { label: 'Semi Bold', value: '600' },
+                    { label: 'Bold', value: '700' },
+                    { label: 'Extra Bold', value: '800' }
+                  ].map(({ label, value }) => (
+                    <DropdownMenuItem
+                      key={value}
+                      onClick={() => handleStyleChange('fontWeight', value)}
+                      className="flex items-center justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span 
+                          className="flex items-center justify-center w-12 h-6 bg-zinc-800 rounded"
+                          style={{ fontWeight: value }}
+                        >
+                          Aa
+                        </span>
+                        <span className="text-[11px]">{label}</span>
+                      </span>
+                      <span className="text-[10px] text-zinc-500">{value}</span>
+                      {localStyles.fontWeight === value && (
+                        <CheckIcon className="size-3 ml-2" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Text Align */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                <AlignLeftIcon className="size-3" />
+                Text Align
+              </Label>
+              <div className="grid grid-cols-4 gap-1">
+                <Button
+                  variant={localStyles.textAlign === 'left' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleStyleChange('textAlign', 'left')}
+                  className="h-8 px-2"
+                >
+                  <AlignLeftIcon className="size-3.5" />
+                </Button>
+                <Button
+                  variant={localStyles.textAlign === 'center' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleStyleChange('textAlign', 'center')}
+                  className="h-8 px-2"
+                >
+                  <AlignCenterIcon className="size-3.5" />
+                </Button>
+                <Button
+                  variant={localStyles.textAlign === 'right' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleStyleChange('textAlign', 'right')}
+                  className="h-8 px-2"
+                >
+                  <AlignRightIcon className="size-3.5" />
+                </Button>
+                <Button
+                  variant={localStyles.textAlign === 'justify' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleStyleChange('textAlign', 'justify')}
+                  className="h-8 px-2"
+                >
+                  <AlignJustifyIcon className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Line Height */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                <LineChartIcon className="size-3" />
+                Line Height
+              </Label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full h-8 px-2.5 justify-between text-[11px] font-mono"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <LineChartIcon className="size-3" />
+                      <span className="text-[10px] leading-tight" style={{ lineHeight: localStyles.lineHeight || '1.5' }}>
+                        Line<br/>Height
+                      </span>
+                    </span>
+                    <span className="text-zinc-500">
+                      {localStyles.lineHeight || 'normal'}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  {[
+                    { label: 'Tight', value: '1' },
+                    { label: 'Snug', value: '1.25' },
+                    { label: 'Normal', value: '1.5' },
+                    { label: 'Relaxed', value: '1.75' },
+                    { label: 'Loose', value: '2' }
+                  ].map(({ label, value }) => (
+                    <DropdownMenuItem
+                      key={value}
+                      onClick={() => handleStyleChange('lineHeight', value)}
+                      className="flex items-center justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span 
+                          className="flex items-center justify-center w-12 h-8 bg-zinc-800 rounded text-[8px]"
+                          style={{ lineHeight: value }}
+                        >
+                          Line<br/>Height
+                        </span>
+                        <span className="text-[11px]">{label}</span>
+                      </span>
+                      <span className="text-[10px] text-zinc-500">{value}</span>
+                      {localStyles.lineHeight === value && (
+                        <CheckIcon className="size-3 ml-2" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Font Family */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                <TypeIcon className="size-3" />
+                Font Family
+              </Label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full h-8 px-2.5 justify-between text-[11px]"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <TypeIcon className="size-3" />
+                      <span style={{ fontFamily: localStyles.fontFamily || 'inherit' }}>
+                        Aa
+                      </span>
+                    </span>
+                    <span className="text-zinc-500 font-mono text-[10px] truncate max-w-32">
+                      {localStyles.fontFamily || 'inherit'}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64">
+                  {[
+                    { label: 'System', value: 'system-ui, -apple-system, sans-serif' },
+                    { label: 'Sans Serif', value: 'ui-sans-serif, sans-serif' },
+                    { label: 'Serif', value: 'ui-serif, serif' },
+                    { label: 'Monospace', value: 'ui-monospace, monospace' },
+                    { label: 'Inter', value: 'Inter, sans-serif' },
+                    { label: 'Roboto', value: 'Roboto, sans-serif' },
+                    { label: 'Open Sans', value: '"Open Sans", sans-serif' },
+                    { label: 'Lato', value: 'Lato, sans-serif' },
+                    { label: 'Poppins', value: 'Poppins, sans-serif' },
+                    { label: 'Montserrat', value: 'Montserrat, sans-serif' }
+                  ].map(({ label, value }) => (
+                    <DropdownMenuItem
+                      key={value}
+                      onClick={() => handleStyleChange('fontFamily', value)}
+                      className="flex items-center justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span 
+                          className="flex items-center justify-center w-12 h-6 bg-zinc-800 rounded text-xs"
+                          style={{ fontFamily: value }}
+                        >
+                          Aa
+                        </span>
+                        <span className="text-[11px]">{label}</span>
+                      </span>
+                      {localStyles.fontFamily === value && (
+                        <CheckIcon className="size-3 ml-2" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            <Separator className="bg-zinc-800" />
+
+            {/* LAYOUT */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                <LayoutDashboardIcon className="size-3" />
+                Display
+              </Label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full h-8 px-2.5 justify-between text-[11px]"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <LayoutDashboardIcon className="size-3" />
+                      <span>{localStyles.display || 'block'}</span>
+                    </span>
+                    <ChevronDownIcon className="size-3 text-zinc-500" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  {displayOptions.map(value => (
+                    <DropdownMenuItem
+                      key={value}
+                      onClick={() => handleStyleChange('display', value)}
+                      className="flex items-center justify-between"
+                    >
+                      <span className="text-[11px]">{value}</span>
+                      {localStyles.display === value && (
+                        <CheckIcon className="size-3 ml-2" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Width & Height */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                  <RectangleHorizontalIcon className="size-3" />
+                  Width
+                </Label>
+                <div className="relative">
+                  <RectangleHorizontalIcon className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
+                  <Input
+                    type="text"
+                    value={localStyles.width || ''}
+                    onChange={(e) => handleStyleChange('width', e.target.value)}
+                    placeholder="auto"
+                    className="h-8 pl-7 pr-2.5 text-[11px] font-mono"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                  <RectangleVerticalIcon className="size-3" />
+                  Height
+                </Label>
+                <div className="relative">
+                  <RectangleVerticalIcon className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
+                  <Input
+                    type="text"
+                    value={localStyles.height || ''}
+                    onChange={(e) => handleStyleChange('height', e.target.value)}
+                    placeholder="auto"
+                    className="h-8 pl-7 pr-2.5 text-[11px] font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Padding */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                <SquareDashedBottomIcon className="size-3" />
+                Padding
+              </Label>
+              <div className="flex items-center gap-1">
+                <div className="relative flex-1">
+                  <SquareDashedBottomIcon className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
+                  <Input
+                    type="text"
+                    value={localStyles.padding || ''}
+                    onChange={(e) => handleStyleChange('padding', e.target.value)}
+                    placeholder="0px"
+                    className="h-8 pl-7 pr-2.5 text-[11px] font-mono"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2"
+                  title="Expand padding controls"
+                >
+                  <UnfoldHorizontalIcon className="size-3.5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2"
+                  title="Lock padding"
+                >
+                  <LockIcon className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Margin */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                <FrameIcon className="size-3" />
+                Margin
+              </Label>
+              <div className="flex items-center gap-1">
+                <div className="relative flex-1">
+                  <FrameIcon className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
+                  <Input
+                    type="text"
+                    value={localStyles.margin || ''}
+                    onChange={(e) => handleStyleChange('margin', e.target.value)}
+                    placeholder="0px"
+                    className="h-8 pl-7 pr-2.5 text-[11px] font-mono"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2"
+                  title="Expand margin controls"
+                >
+                  <UnfoldHorizontalIcon className="size-3.5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2"
+                  title="Lock margin"
+                >
+                  <LockIcon className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Flex options */}
+            {localStyles.display === 'flex' && (
+              <>
+                <Separator className="bg-zinc-800" />
+                
+                {/* Direction */}
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-zinc-400">Direction</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant={localStyles.flexDirection === 'row' || !localStyles.flexDirection ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleStyleChange('flexDirection', 'row')}
+                      className="h-12 flex-col gap-1"
+                    >
+                      <ArrowRightIcon className="size-4" />
+                      <span className="text-[10px]">Row</span>
+                    </Button>
+                    <Button
+                      variant={localStyles.flexDirection === 'column' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleStyleChange('flexDirection', 'column')}
+                      className="h-12 flex-col gap-1"
+                    >
+                      <ArrowDownIcon className="size-4" />
+                      <span className="text-[10px]">Column</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Alignment */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] text-zinc-400">Alignment</Label>
+                    <div className="grid grid-cols-2 gap-1">
+                      <Button
+                        variant={localStyles.alignItems === 'flex-start' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handleStyleChange('alignItems', 'flex-start')}
+                        className="h-8 px-2"
+                        title="Start"
+                      >
+                        <AlignVerticalJustifyStartIcon className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant={localStyles.alignItems === 'center' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handleStyleChange('alignItems', 'center')}
+                        className="h-8 px-2"
+                        title="Center"
+                      >
+                        <AlignVerticalJustifyCenterIcon className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant={localStyles.alignItems === 'flex-end' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handleStyleChange('alignItems', 'flex-end')}
+                        className="h-8 px-2"
+                        title="End"
+                      >
+                        <AlignVerticalJustifyEndIcon className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant={localStyles.alignItems === 'stretch' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handleStyleChange('alignItems', 'stretch')}
+                        className="h-8 px-2"
+                        title="Stretch"
+                      >
+                        <StretchHorizontalIcon className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] text-zinc-400">Justification</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full h-8 px-2.5 justify-between text-[11px]"
+                        >
+                          <span className="truncate">
+                            {localStyles.justifyContent?.replace('flex-', '').replace('-', ' ') || 'start'}
+                          </span>
+                          <ChevronDownIcon className="size-3 text-zinc-500 shrink-0" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-48">
+                        {[
+                          { label: 'Start', value: 'flex-start', icon: AlignHorizontalJustifyStartIcon },
+                          { label: 'Center', value: 'center', icon: AlignHorizontalJustifyCenterIcon },
+                          { label: 'End', value: 'flex-end', icon: AlignHorizontalJustifyEndIcon },
+                          { label: 'Space Between', value: 'space-between', icon: AlignHorizontalSpaceBetweenIcon },
+                          { label: 'Space Around', value: 'space-around', icon: AlignHorizontalSpaceAroundIcon }
+                        ].map(({ label, value, icon: Icon }) => (
+                          <DropdownMenuItem
+                            key={value}
+                            onClick={() => handleStyleChange('justifyContent', value)}
+                            className="flex items-center justify-between"
+                          >
+                            <span className="flex items-center gap-2">
+                              <Icon className="size-3.5" />
+                              <span className="text-[11px]">{label}</span>
+                            </span>
+                            {localStyles.justifyContent === value && (
+                              <CheckIcon className="size-3 ml-2" />
+                            )}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+
+                {/* Gap */}
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                    <MinusIcon className="size-3" />
+                    Gap
+                  </Label>
+                  <div className="relative">
+                    <MinusIcon className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
+                    <Input
+                      type="text"
+                      value={localStyles.gap || ''}
+                      onChange={(e) => handleStyleChange('gap', e.target.value)}
+                      placeholder="0px"
+                      className="h-8 pl-7 pr-2.5 text-[11px] font-mono"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
           </TabsContent>
 
           {/* Position Tab - NEW Figma-style positioning */}
-          <TabsContent value="position" className="m-0 p-3 space-y-4">
+          <TabsContent value="position" className="m-0 p-2.5 space-y-2.5">
             {/* Mode selector */}
             <PositionModeSelector
               value={positionMode}
@@ -843,9 +1500,9 @@ export function ElementEditor({
             <Separator className="bg-zinc-800" />
 
             {/* Grid Size Selector */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-xs text-zinc-400 flex items-center gap-1">
+                <Label className="text-[11px] text-zinc-400 flex items-center gap-1">
                   <GridIcon className="size-3" />
                   Grid Size
                 </Label>
@@ -857,7 +1514,7 @@ export function ElementEditor({
                     variant={gridSize === size ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setGridSize(size)}
-                    className="h-6 px-2 text-xs flex-1"
+                    className="h-6 px-2 text-[11px] flex-1"
                   >
                     {size}px
                   </Button>
@@ -866,10 +1523,10 @@ export function ElementEditor({
             </div>
 
             {/* Tailwind Output */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Generated Classes</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400">Generated Classes</Label>
               <div className="flex items-center gap-2 bg-zinc-800/50 rounded-md p-2">
-                <code className="text-xs text-emerald-400 font-mono flex-1 truncate">
+                <code className="text-[11px] text-emerald-400 font-mono flex-1 truncate">
                   {positionToTailwind(positionMode, positionValues).classes.join(' ') || 'No classes'}
                 </code>
                 <Button
@@ -887,325 +1544,12 @@ export function ElementEditor({
             </div>
           </TabsContent>
 
-          {/* Layout Tab */}
-          <TabsContent value="layout" className="m-0 p-3 space-y-4">
-            {/* Display */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Display</Label>
-              <div className="flex gap-1 flex-wrap">
-                {displayOptions.map(value => (
-                  <Button
-                    key={value}
-                    variant={localStyles.display === value ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => handleStyleChange('display', value)}
-                    className="h-6 px-2 text-xs"
-                  >
-                    {value}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Position */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Position</Label>
-              <div className="flex gap-1 flex-wrap">
-                {positionOptions.map(value => (
-                  <Button
-                    key={value}
-                    variant={localStyles.position === value ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => handleStyleChange('position', value)}
-                    className="h-6 px-2 text-xs"
-                  >
-                    {value}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Width & Height */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs text-zinc-400">Width</Label>
-                <Input
-                  type="text"
-                  value={localStyles.width || ''}
-                  onChange={(e) => handleStyleChange('width', e.target.value)}
-                  placeholder="auto"
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-zinc-400">Height</Label>
-                <Input
-                  type="text"
-                  value={localStyles.height || ''}
-                  onChange={(e) => handleStyleChange('height', e.target.value)}
-                  placeholder="auto"
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Padding */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Padding</Label>
-              <Input
-                type="text"
-                value={localStyles.padding || ''}
-                onChange={(e) => handleStyleChange('padding', e.target.value)}
-                placeholder="0px"
-                className="h-8 text-xs font-mono"
-              />
-              <div className="grid grid-cols-4 gap-1">
-                {['0', '4px', '8px', '16px', '24px', '32px'].map(value => (
-                  <Button
-                    key={value}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleStyleChange('padding', value)}
-                    className="h-6 px-1 text-xs"
-                  >
-                    {value}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Margin */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Margin</Label>
-              <Input
-                type="text"
-                value={localStyles.margin || ''}
-                onChange={(e) => handleStyleChange('margin', e.target.value)}
-                placeholder="0px"
-                className="h-8 text-xs font-mono"
-              />
-            </div>
-
-            {/* Flex options (if display is flex) */}
-            {localStyles.display === 'flex' && (
-              <>
-                <Separator className="bg-zinc-800" />
-                <div className="space-y-2">
-                  <Label className="text-xs text-zinc-400">Flex Direction</Label>
-                  <div className="flex gap-1 flex-wrap">
-                    {flexDirectionOptions.map(value => (
-                      <Button
-                        key={value}
-                        variant={localStyles.flexDirection === value ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => handleStyleChange('flexDirection', value)}
-                        className="h-6 px-2 text-xs"
-                      >
-                        {value}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs text-zinc-400">Justify Content</Label>
-                  <div className="flex gap-1 flex-wrap">
-                    {justifyOptions.map(value => (
-                      <Button
-                        key={value}
-                        variant={localStyles.justifyContent === value ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => handleStyleChange('justifyContent', value)}
-                        className="h-6 px-2 text-xs"
-                      >
-                        {value.replace('flex-', '')}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs text-zinc-400">Align Items</Label>
-                  <div className="flex gap-1 flex-wrap">
-                    {alignOptions.map(value => (
-                      <Button
-                        key={value}
-                        variant={localStyles.alignItems === value ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => handleStyleChange('alignItems', value)}
-                        className="h-6 px-2 text-xs"
-                      >
-                        {value.replace('flex-', '')}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs text-zinc-400">Gap</Label>
-                  <Input
-                    type="text"
-                    value={localStyles.gap || ''}
-                    onChange={(e) => handleStyleChange('gap', e.target.value)}
-                    placeholder="0px"
-                    className="h-8 text-xs font-mono"
-                  />
-                </div>
-              </>
-            )}
-          </TabsContent>
-
-          {/* Text Tab */}
-          <TabsContent value="text" className="m-0 p-3 space-y-4">
-            {/* Text Content */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Text Content</Label>
-              
-              {/* Warning for complex elements */}
-              {element.isComplexText && (
-                <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-md text-xs text-amber-300">
-                  <p className="font-medium">⚠️ Complex element</p>
-                  <p className="opacity-80 mt-1">
-                    This element contains {element.childCount} child element(s). 
-                    Text changes will only affect direct text content, not nested elements.
-                  </p>
-                </div>
-              )}
-              
-              {/* Show different text representations */}
-              {element.isComplexText && element.directTextContent && (
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500">Direct text only:</span>
-                  <div className="p-2 bg-zinc-800/50 rounded text-xs font-mono text-zinc-300 max-h-16 overflow-auto">
-                    {element.directTextContent || '(no direct text)'}
-                  </div>
-                </div>
-              )}
-              
-              <textarea
-                value={localText}
-                onChange={(e) => {
-                  setLocalText(e.target.value);
-                  setHasChanges(true);
-                }}
-                onBlur={() => {
-                  // Apply on blur (when user clicks away)
-                  if (element && localText !== element.textContent) {
-                    console.log('[ElementEditor] Applying text on blur:', element.selector);
-                    onTextChange(element.selector, localText);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  // Apply on Ctrl/Cmd + Enter
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                    e.preventDefault();
-                    if (element) {
-                      onTextChange(element.selector, localText);
-                    }
-                  }
-                }}
-                placeholder="Enter text..."
-                className="w-full h-20 p-2 text-xs font-mono bg-zinc-800 border border-zinc-700 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-              <p className="text-[10px] text-zinc-600">Press ⌘+Enter to preview • Changes auto-apply</p>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Font Size */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Font Size</Label>
-              <Input
-                type="text"
-                value={localStyles.fontSize || ''}
-                onChange={(e) => handleStyleChange('fontSize', e.target.value)}
-                placeholder="inherit"
-                className="h-8 text-xs font-mono"
-              />
-              <div className="flex gap-1 flex-wrap">
-                {['12px', '14px', '16px', '18px', '24px', '32px', '48px'].map(value => (
-                  <Button
-                    key={value}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleStyleChange('fontSize', value)}
-                    className="h-6 px-2 text-xs"
-                  >
-                    {value}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Font Weight */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Font Weight</Label>
-              <div className="flex gap-1 flex-wrap">
-                {fontWeightOptions.map(value => (
-                  <Button
-                    key={value}
-                    variant={localStyles.fontWeight === value ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => handleStyleChange('fontWeight', value)}
-                    className="h-6 px-2 text-xs"
-                  >
-                    {value}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Text Align */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Text Align</Label>
-              <div className="flex gap-1">
-                {textAlignOptions.map(value => (
-                  <Button
-                    key={value}
-                    variant={localStyles.textAlign === value ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => handleStyleChange('textAlign', value)}
-                    className="h-6 px-2 text-xs"
-                  >
-                    {value}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            <Separator className="bg-zinc-800" />
-
-            {/* Line Height */}
-            <div className="space-y-1">
-              <Label className="text-xs text-zinc-400">Line Height</Label>
-              <Input
-                type="text"
-                value={localStyles.lineHeight || ''}
-                onChange={(e) => handleStyleChange('lineHeight', e.target.value)}
-                placeholder="normal"
-                className="h-8 text-xs font-mono"
-              />
-            </div>
-          </TabsContent>
-
           {/* Export Tab - CSS to Tailwind */}
-          <TabsContent value="export" className="m-0 p-3 space-y-4">
+          <TabsContent value="export" className="m-0 p-2.5 space-y-2.5">
             {/* Tailwind Classes Preview */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-xs text-zinc-400">Tailwind Classes</Label>
+                <Label className="text-[11px] text-zinc-400">Tailwind Classes</Label>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1224,7 +1568,7 @@ export function ElementEditor({
                   {copiedTailwind ? 'Copied!' : 'Copy'}
                 </Button>
               </div>
-              <div className="p-3 bg-zinc-800 rounded-md font-mono text-xs text-emerald-400 break-all">
+              <div className="p-3 bg-zinc-800 rounded-md font-mono text-[11px] text-emerald-400 break-all">
                 {tailwindResult.classes.length > 0 
                   ? tailwindResult.classes.join(' ')
                   : <span className="text-zinc-500 italic">No styles to convert</span>
@@ -1237,9 +1581,9 @@ export function ElementEditor({
             {/* Merged with existing classes */}
             {element.className && (
               <>
-                <div className="space-y-2">
-                  <Label className="text-xs text-zinc-400">Merged with Existing Classes</Label>
-                  <div className="p-3 bg-zinc-800 rounded-md font-mono text-xs text-blue-400 break-all">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-zinc-400">Merged with Existing Classes</Label>
+                  <div className="p-3 bg-zinc-800 rounded-md font-mono text-[11px] text-blue-400 break-all">
                     {mergedClasses}
                   </div>
                   <Button
@@ -1261,8 +1605,8 @@ export function ElementEditor({
             )}
 
             {/* Conversion Details */}
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Conversion Details</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-zinc-400">Conversion Details</Label>
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 {tailwindResult.conversions.map((conv, idx) => (
                   <div 
@@ -1281,7 +1625,7 @@ export function ElementEditor({
                   </div>
                 ))}
                 {tailwindResult.conversions.length === 0 && (
-                  <div className="text-xs text-zinc-500 italic p-2">
+                  <div className="text-[11px] text-zinc-500 italic p-2">
                     No inline styles to convert
                   </div>
                 )}
@@ -1292,8 +1636,8 @@ export function ElementEditor({
             {tailwindResult.unconverted.length > 0 && (
               <>
                 <Separator className="bg-zinc-800" />
-                <div className="space-y-2">
-                  <Label className="text-xs text-amber-400">⚠️ Not Converted</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-amber-400">⚠️ Not Converted</Label>
                   <div className="space-y-1">
                     {tailwindResult.unconverted.map((item, idx) => (
                       <div 
@@ -1312,7 +1656,7 @@ export function ElementEditor({
             <Separator className="bg-zinc-800" />
 
             {/* Stats */}
-            <div className="flex items-center gap-4 text-xs text-zinc-500">
+            <div className="flex items-center gap-4 text-[11px] text-zinc-500">
               <div className="flex items-center gap-1">
                 <CheckCircleIcon className="size-3 text-green-500" />
                 <span>{tailwindResult.conversions.filter(c => c.exact).length} exact</span>
@@ -1333,7 +1677,7 @@ export function ElementEditor({
       {hasChanges && (
         <div className="shrink-0 border-t border-zinc-800 bg-zinc-900/95 backdrop-blur-sm px-3 py-2">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <div className="flex items-center gap-2 text-[11px] text-zinc-500">
               <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
               <span>Unsaved</span>
             </div>
@@ -1342,7 +1686,7 @@ export function ElementEditor({
                 variant="ghost"
                 size="sm"
                 onClick={handleReset}
-                className="h-7 px-2 text-xs text-zinc-400"
+                className="h-7 px-2 text-[11px] text-zinc-400"
               >
                 <RotateCcwIcon className="size-3" />
               </Button>
@@ -1352,7 +1696,7 @@ export function ElementEditor({
                 onClick={handleApplyToCode}
                 disabled={isSaving}
                 className={cn(
-                  "h-7 px-3 text-xs text-white font-medium",
+                  "h-7 px-3 text-[11px] text-white font-medium",
                   saveAsTailwind 
                     ? "bg-emerald-600 hover:bg-emerald-700" 
                     : "bg-blue-600 hover:bg-blue-700"

@@ -10,6 +10,11 @@ import { ChatParticipantBridge } from './chatParticipant';
 import { ActivityTracker } from './activityTracker';
 import { WebSocketMessage, ChangeModelPayload, WorkspaceInfo, FileTreeItem, NextJsProject } from './types';
 
+// REALM Protocol imports
+import { SyncEngine, SyncClient } from './realm/sync/SyncEngine';
+import { EventBus, createEvent } from './realm/sync/EventBus';
+import type { RealmEvent, RealmID } from './realm/types';
+
 // Babel imports for safe AST manipulation
 import * as babelParser from '@babel/parser';
 import babelTraverse from '@babel/traverse';
@@ -29,11 +34,18 @@ export class AppBuilderServer {
   private port: number;
   private nextJsProjects: Map<string, NextJsProject> = new Map();
   private nextJsProcesses: Map<string, ChildProcess> = new Map();
+  
+  // REALM Protocol
+  private syncEngine: SyncEngine;
+  private realmEventBus: EventBus;
+  private wsClientMap: Map<WebSocket, string> = new Map(); // ws -> clientId
 
   constructor(port: number) {
     this.port = port;
     this.modelBridge = ModelBridge.getInstance();
     this.activityTracker = ActivityTracker.getInstance();
+    this.syncEngine = SyncEngine.getInstance();
+    this.realmEventBus = EventBus.getInstance();
     this.app = express();
     this.server = http.createServer(this.app);
     this.wss = new WebSocketServer({ server: this.server });
@@ -44,6 +56,36 @@ export class AppBuilderServer {
     this.setupModelBridgeListeners();
     this.setupChatParticipantBridge();
     this.setupActivityTracker();
+    this.setupRealmEventHandlers();
+  }
+  
+  /**
+   * Setup REALM event handlers for broadcasting to clients
+   */
+  private setupRealmEventHandlers(): void {
+    // Broadcast REALM events to WebSocket clients
+    this.realmEventBus.on('*', (event) => {
+      // Broadcast to all connected clients as realm_event
+      this.broadcastRealmEvent(event);
+    });
+    
+    console.log('[Server] REALM event handlers configured');
+  }
+  
+  /**
+   * Broadcast a REALM event to all connected WebSocket clients
+   */
+  private broadcastRealmEvent(event: RealmEvent): void {
+    const message = JSON.stringify({
+      type: 'realm_event',
+      payload: event,
+    });
+    
+    for (const client of this.clients) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    }
   }
 
   private setupMiddleware(): void {
@@ -300,6 +342,13 @@ export class AppBuilderServer {
       case 'applyElementChanges':
         await this.handleApplyElementChanges(ws, message);
         break;
+        
+      // ============================================================================
+      // REALM Protocol Messages
+      // ============================================================================
+      case 'realm_event':
+        this.handleRealmEvent(ws, message.payload as RealmEvent);
+        break;
 
       case 'ping':
         this.sendToClient(ws, { type: 'pong' });
@@ -310,6 +359,104 @@ export class AppBuilderServer {
           type: 'error',
           payload: { message: `Unknown message type: ${message.type}` }
         });
+    }
+  }
+  
+  /**
+   * Handle incoming REALM protocol events from WebSocket clients
+   */
+  private handleRealmEvent(ws: WebSocket, event: RealmEvent): void {
+    console.log(`[Server/REALM] Received event: ${event.type}`);
+    
+    // Get or create client ID for this WebSocket
+    let clientId = this.wsClientMap.get(ws);
+    if (!clientId) {
+      clientId = `ws_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      this.wsClientMap.set(ws, clientId);
+      
+      // Register as a sync client
+      const syncClient: SyncClient = {
+        id: clientId,
+        type: 'websocket',
+        send: (ev: RealmEvent) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'realm_event', payload: ev }));
+          }
+        },
+        isConnected: () => ws.readyState === WebSocket.OPEN,
+      };
+      this.syncEngine.registerClient(syncClient);
+    }
+    
+    // Forward to SyncEngine for processing
+    this.syncEngine.receiveFromClient(clientId, event);
+    
+    // Handle specific event types for immediate response
+    if (event.type === 'COMMIT_REQUESTED') {
+      this.handleRealmCommit(ws, event as RealmEvent & { type: 'COMMIT_REQUESTED'; realmId: RealmID });
+    } else if (event.type === 'ROLLBACK_REQUESTED') {
+      this.handleRealmRollback(ws, event as RealmEvent & { type: 'ROLLBACK_REQUESTED'; realmId: RealmID });
+    }
+  }
+  
+  /**
+   * Handle REALM commit request
+   */
+  private async handleRealmCommit(ws: WebSocket, event: { type: 'COMMIT_REQUESTED'; realmId: RealmID }): Promise<void> {
+    try {
+      console.log('[Server/REALM] Processing commit for:', event.realmId.hash);
+      
+      // Commit via SyncEngine (which uses TransactionManager)
+      await this.syncEngine.commitPendingChanges(event.realmId);
+      
+      // Send success response
+      const response: RealmEvent = {
+        id: `evt_commit_${Date.now()}`,
+        timestamp: Date.now(),
+        type: 'COMMIT_COMPLETED',
+        source: 'system',
+        realmId: event.realmId,
+      };
+      ws.send(JSON.stringify({ type: 'realm_event', payload: response }));
+      
+    } catch (error) {
+      console.error('[Server/REALM] Commit failed:', error);
+      // Send error via transaction failed event
+      const errorEvent: RealmEvent = {
+        id: `evt_error_${Date.now()}`,
+        timestamp: Date.now(),
+        type: 'TRANSACTION_FAILED',
+        source: 'system',
+        transactionId: 'commit_' + Date.now(),
+        realmId: event.realmId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      ws.send(JSON.stringify({ type: 'realm_event', payload: errorEvent }));
+    }
+  }
+  
+  /**
+   * Handle REALM rollback request
+   */
+  private async handleRealmRollback(ws: WebSocket, event: { type: 'ROLLBACK_REQUESTED'; realmId: RealmID }): Promise<void> {
+    try {
+      console.log('[Server/REALM] Processing rollback for:', event.realmId.hash);
+      
+      // Rollback via SyncEngine
+      await this.syncEngine.rollbackPendingChanges(event.realmId);
+      
+      // Send success response
+      const response: RealmEvent = {
+        id: `evt_rollback_${Date.now()}`,
+        timestamp: Date.now(),
+        type: 'ROLLBACK_COMPLETED',
+        source: 'system',
+        realmId: event.realmId,
+      };
+      ws.send(JSON.stringify({ type: 'realm_event', payload: response }));
+      
+    } catch (error) {
+      console.error('[Server/REALM] Rollback failed:', error);
     }
   }
 
@@ -2028,6 +2175,30 @@ export function DOMSelectorBridge() {
             }
           }
 
+          // ---------- NTH-OF-TYPE COUNTING FIRST ----------
+          // CSS nth-of-type counts ALL elements of the same tag under the same parent
+          // regardless of classes. So we must count FIRST, then check classes.
+          
+          // Get parent path as identifier for nth-of-type counting
+          // Key includes both parent AND tag name to correctly count same-type siblings
+          const parentPath = path.parentPath;
+          const parentKey = `${parentPath?.node?.start?.toString() || 'root'}_${elementNameLower}`;
+          
+          // Increment count for this tag type under this parent
+          const currentCount = (matchesByParent.get(parentKey) || 0) + 1;
+          matchesByParent.set(parentKey, currentCount);
+          
+          console.log(`[Server] AST: <${elementName}> #${currentCount} under parent (need nth=${nthIndex})`);
+          
+          // Skip if this is not the nth-of-type we're looking for
+          if (currentCount !== nthIndex) {
+            return;
+          }
+          
+          console.log(`[Server] AST: ✓ Found ${elementName} at position #${nthIndex}, checking classes...`);
+          
+          // ---------- NOW CHECK CLASSES ----------
+          
           // Check for className match
           let classesMatch = false;
           // Check if this is a Next.js component that injects styles at runtime
@@ -2048,28 +2219,23 @@ export function DOMSelectorBridge() {
               const reverseMatchingClasses = sourceClasses.filter(sc => targetClasses.includes(sc));
               const reverseMatchRatio = sourceClasses.length > 0 ? reverseMatchingClasses.length / sourceClasses.length : 0;
               
-              // Match criteria:
-              // 1. At least 50% of target classes found in source
-              // 2. At least 3 classes match on both sides
-              // 3. For Next.js components: if most/all source classes are in target (reverse match >= 80%)
-              //    This handles cases where Next.js injects many additional classes at runtime
-              if (matchRatio >= 0.5 || 
-                  (matchingClasses.length >= 3 && reverseMatchingClasses.length >= 2) ||
-                  (isNextJsComponent && reverseMatchRatio >= 0.8) ||
-                  (sourceClasses.length > 0 && reverseMatchRatio >= 0.8 && matchingClasses.length >= 1)) {
+              console.log(`[Server] AST: Classes check - source: [${sourceClasses.slice(0, 5).join(', ')}...], target: [${targetClasses.join(', ')}]`);
+              console.log(`[Server] AST: Match ratios - forward: ${matchingClasses.length}/${targetClasses.length} (${(matchRatio * 100).toFixed(0)}%), reverse: ${reverseMatchingClasses.length}/${sourceClasses.length}`);
+              
+              // Match criteria - RELAXED for better matching
+              if (matchRatio >= 1.0 || 
+                  (matchRatio >= 0.5 && matchingClasses.length >= 2) ||
+                  (matchingClasses.length >= 2) ||
+                  (isNextJsComponent && reverseMatchRatio >= 0.5)) {
                 classesMatch = true;
-                console.log(`[Server] AST: Class match - forward: ${matchingClasses.length}/${targetClasses.length} (${(matchRatio * 100).toFixed(0)}%), reverse: ${reverseMatchingClasses.length}/${sourceClasses.length} (${(reverseMatchRatio * 100).toFixed(0)}%) - matching: ${matchingClasses.join(', ')}`);
+                console.log(`[Server] AST: ✓ Class match!`);
+              } else {
+                console.log(`[Server] AST: ✗ Class match failed`);
               }
             } else if (!classAttr) {
-              // Element in source has no className - this can happen when:
-              // 1. Next.js Image/Link components inject classes at runtime
-              // 2. CSS modules or styled-components add classes dynamically
-              // In this case, match by tag only since classes are runtime-injected
-              console.log(`[Server] AST: No className in source for ${elementName}, allowing tag-only match (runtime classes)`);
+              console.log(`[Server] AST: No className in source for ${elementName}, allowing tag-only match`);
               classesMatch = true;
             } else if (classAttr && !t.isStringLiteral(classAttr.value)) {
-              // className exists but is a dynamic expression (template literal, variable, etc.)
-              // Allow match since we can't statically compare
               console.log(`[Server] AST: Dynamic className for ${elementName}, allowing tag-only match`);
               classesMatch = true;
             }
@@ -2078,22 +2244,8 @@ export function DOMSelectorBridge() {
             classesMatch = true;
           }
           
-          if (!classesMatch && !targetId) return;
-
-          // Get parent path as identifier for nth-of-type counting
-          // We use the parent's start position as unique identifier
-          const parentPath = path.parentPath;
-          const parentKey = parentPath?.node?.start?.toString() || 'root';
-          
-          // Increment match count for this parent
-          const currentCount = (matchesByParent.get(parentKey) || 0) + 1;
-          matchesByParent.set(parentKey, currentCount);
-          
-          console.log(`[Server] AST: Found match for ${elementName} under parent ${parentKey}, count: ${currentCount}, need: ${nthIndex}`);
-          
-          // Only process if this is the nth match under this parent we're looking for
-          if (currentCount !== nthIndex) {
-            console.log(`[Server] AST: Skipping match #${currentCount}, looking for #${nthIndex}`);
+          if (!classesMatch && !targetId) {
+            console.log(`[Server] AST: ✗ ${elementName} #${nthIndex} classes don't match, but this IS the nth-of-type position - returning early`);
             return;
           }
 

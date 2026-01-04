@@ -2,6 +2,29 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { ModelsByVendor, WebSocketMessage, ChangeModelPayload, ChatMessage, WorkspaceInfo, NextJsProject, MCPServer, Activity, ActivityType } from '@/types';
+import { RealmClient, ConnectionState } from '@/realm/RealmClient';
+import type { RealmID, RealmEvent, ElementStyles as RealmElementStyles } from '@/realm/types';
+
+// ============================================================================
+// REALM Integration
+// ============================================================================
+
+/** Singleton RealmClient instance */
+let realmClientInstance: RealmClient | null = null;
+
+function getOrCreateRealmClient(): RealmClient {
+  if (!realmClientInstance) {
+    realmClientInstance = new RealmClient({
+      wsUrl: 'ws://localhost:57129',
+      autoReconnect: true,
+    });
+  }
+  return realmClientInstance;
+}
+
+// ============================================================================
+// Types
+// ============================================================================
 
 interface UseVSCodeBridgeReturn {
   models: ModelsByVendor;
@@ -41,6 +64,25 @@ interface UseVSCodeBridgeReturn {
   clearActivities: () => void;
   // Element editing
   applyElementChanges: (selector: string, changes: Record<string, unknown>, url: string) => void;
+  // ============================================================================
+  // REALM Protocol API
+  // ============================================================================
+  /** REALM connection state */
+  realmConnectionState: ConnectionState;
+  /** Is REALM connected */
+  isRealmConnected: boolean;
+  /** Currently selected REALM element */
+  selectedRealmElement: RealmID | null;
+  /** Send style change via REALM (preview mode for live preview, false for persisted) */
+  sendRealmStyleChange: (realmId: RealmID, styles: Partial<RealmElementStyles>, preview?: boolean) => void;
+  /** Send text change via REALM */
+  sendRealmTextChange: (realmId: RealmID, text: string, preview?: boolean) => void;
+  /** Commit all pending REALM changes */
+  commitRealmChanges: (realmId: RealmID) => void;
+  /** Rollback pending REALM changes */
+  rollbackRealmChanges: (realmId: RealmID) => void;
+  /** Get REALM client instance for advanced usage */
+  getRealmClient: () => RealmClient;
 }
 
 export function useVSCodeBridge(): UseVSCodeBridgeReturn {
@@ -69,12 +111,111 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
   // Activity tracking - real-time events
   const [activities, setActivities] = useState<Activity[]>([]);
   
+  // ============================================================================
+  // REALM Protocol State
+  // ============================================================================
+  const [realmConnectionState, setRealmConnectionState] = useState<ConnectionState>('disconnected');
+  const [selectedRealmElement, setSelectedRealmElement] = useState<RealmID | null>(null);
+  const realmClientRef = useRef<RealmClient | null>(null);
+  
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingRequestsRef = useRef<Map<string, (success: boolean) => void>>(new Map());
   const currentStreamRef = useRef<string>('');
   const copilotStreamRef = useRef<string>('');
   const isConnectingRef = useRef(false);
+
+  // ============================================================================
+  // REALM Protocol Setup
+  // ============================================================================
+  useEffect(() => {
+    // Initialize REALM client
+    const client = getOrCreateRealmClient();
+    realmClientRef.current = client;
+    
+    // Listen to connection state changes
+    const unsubscribeState = client.onStateChange((state) => {
+      setRealmConnectionState(state);
+      console.log('[Bridge/REALM] Connection state:', state);
+    });
+    
+    // Listen to REALM events
+    const unsubscribeStyleChange = client.on('STYLE_CHANGED', (event) => {
+      console.log('[Bridge/REALM] Style changed:', event);
+      // Add to activities for visibility
+      setActivities(prev => [{
+        id: `realm-style-${Date.now()}`,
+        type: 'file_modify' as ActivityType,
+        timestamp: Date.now(),
+        data: {
+          path: 'realmId' in event ? event.realmId.sourceFile : 'unknown',
+          message: `REALM style change (preview: ${'preview' in event ? event.preview : false})`
+        }
+      }, ...prev].slice(0, 50));
+    });
+    
+    const unsubscribeTextChange = client.on('TEXT_CHANGED', (event) => {
+      console.log('[Bridge/REALM] Text changed:', event);
+      setActivities(prev => [{
+        id: `realm-text-${Date.now()}`,
+        type: 'file_modify' as ActivityType,
+        timestamp: Date.now(),
+        data: {
+          path: 'realmId' in event ? event.realmId.sourceFile : 'unknown',
+          message: 'REALM text change'
+        }
+      }, ...prev].slice(0, 50));
+    });
+    
+    const unsubscribeElementSelected = client.on('ELEMENT_SELECTED', (event) => {
+      console.log('[Bridge/REALM] Element selected:', event);
+      if ('realmId' in event) {
+        setSelectedRealmElement(event.realmId);
+      }
+    });
+    
+    const unsubscribeCommit = client.on('COMMIT_COMPLETED', (event) => {
+      console.log('[Bridge/REALM] Commit completed:', event);
+      setActivities(prev => [{
+        id: `realm-commit-${Date.now()}`,
+        type: 'file_modify' as ActivityType,
+        timestamp: Date.now(),
+        data: {
+          path: 'realmId' in event ? event.realmId.sourceFile : 'file',
+          message: 'Changes committed successfully'
+        }
+      }, ...prev].slice(0, 50));
+    });
+    
+    const unsubscribeRollback = client.on('ROLLBACK_COMPLETED', (event) => {
+      console.log('[Bridge/REALM] Rollback completed:', event);
+      setActivities(prev => [{
+        id: `realm-rollback-${Date.now()}`,
+        type: 'diagnostic' as ActivityType,
+        timestamp: Date.now(),
+        data: {
+          message: 'Changes rolled back',
+          severity: 'warning' as const
+        }
+      }, ...prev].slice(0, 50));
+    });
+    
+    // Connect if disconnected
+    if (client.getState() === 'disconnected') {
+      // Auto-connect REALM client
+      console.log('[Bridge/REALM] Auto-connecting REALM client...');
+      client.connect();
+    }
+    
+    return () => {
+      unsubscribeState();
+      unsubscribeStyleChange();
+      unsubscribeTextChange();
+      unsubscribeElementSelected();
+      unsubscribeCommit();
+      unsubscribeRollback();
+    };
+  }, []);
 
   const connect = useCallback(() => {
     // Prevent multiple simultaneous connection attempts
@@ -690,6 +831,84 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
     wsRef.current.send(JSON.stringify(message));
   }, []);
 
+  // ============================================================================
+  // REALM Protocol Callbacks
+  // ============================================================================
+  
+  /**
+   * Send style change via REALM protocol
+   * @param realmId - The unique REALM identifier for the element
+   * @param styles - Styles to apply
+   * @param preview - If true, only preview (don't persist). Default: true
+   */
+  const sendRealmStyleChange = useCallback((realmId: RealmID, styles: Partial<RealmElementStyles>, preview: boolean = true) => {
+    const client = realmClientRef.current;
+    if (!client) {
+      console.error('[REALM] Client not initialized');
+      return;
+    }
+    
+    console.log('[REALM] Sending style change:', { realmId: realmId.hash, styles, preview });
+    client.sendStyleChange(realmId, styles, preview);
+  }, []);
+  
+  /**
+   * Send text change via REALM protocol
+   * @param realmId - The unique REALM identifier for the element
+   * @param text - New text content
+   * @param preview - If true, only preview (don't persist). Default: true
+   */
+  const sendRealmTextChange = useCallback((realmId: RealmID, text: string, preview: boolean = true) => {
+    const client = realmClientRef.current;
+    if (!client) {
+      console.error('[REALM] Client not initialized');
+      return;
+    }
+    
+    console.log('[REALM] Sending text change:', { realmId: realmId.hash, text, preview });
+    client.sendTextChange(realmId, text, preview);
+  }, []);
+  
+  /**
+   * Commit all pending REALM changes for an element
+   * This persists the changes to the source file
+   */
+  const commitRealmChanges = useCallback((realmId: RealmID) => {
+    const client = realmClientRef.current;
+    if (!client) {
+      console.error('[REALM] Client not initialized');
+      return;
+    }
+    
+    console.log('[REALM] Committing changes for:', realmId.hash);
+    client.sendCommit(realmId);
+  }, []);
+  
+  /**
+   * Rollback pending REALM changes for an element
+   * This reverts any preview changes
+   */
+  const rollbackRealmChanges = useCallback((realmId: RealmID) => {
+    const client = realmClientRef.current;
+    if (!client) {
+      console.error('[REALM] Client not initialized');
+      return;
+    }
+    
+    console.log('[REALM] Rolling back changes for:', realmId.hash);
+    client.sendRollback(realmId);
+  }, []);
+  
+  /**
+   * Get the REALM client instance for advanced usage
+   */
+  const getRealmClientInstance = useCallback(() => {
+    if (!realmClientRef.current) {
+      realmClientRef.current = getOrCreateRealmClient();
+    }
+    return realmClientRef.current;
+  }, []);
+
   return {
     models,
     isConnected,
@@ -726,7 +945,18 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
     // Activity tracking - real-time events
     activities,
     clearActivities,
-    // Element editing
+    // Element editing (legacy)
     applyElementChanges,
+    // ============================================================================
+    // REALM Protocol API
+    // ============================================================================
+    realmConnectionState,
+    isRealmConnected: realmConnectionState === 'connected',
+    selectedRealmElement,
+    sendRealmStyleChange,
+    sendRealmTextChange,
+    commitRealmChanges,
+    rollbackRealmChanges,
+    getRealmClient: getRealmClientInstance,
   };
 }

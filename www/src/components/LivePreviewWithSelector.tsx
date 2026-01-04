@@ -32,6 +32,7 @@ import { useDOMSelectorPostMessage, ElementBounds } from "@/hooks/useDOMSelector
 import { DOMOverlay } from "@/components/DOMOverlay";
 import { ElementEditor, type ElementData, type ElementStyles, type ElementChanges } from "@/components/ElementEditor";
 import { useVSCodeBridge } from "@/hooks/useVSCodeBridge";
+import type { RealmID } from "@/realm/types";
 
 // Types
 interface ElementInfo {
@@ -113,9 +114,27 @@ export function LivePreviewWithSelector({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  
+  // Pending changes tracking for REALM integration
+  const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  const [currentRealmId, setCurrentRealmId] = useState<RealmID | null>(null);
+  
+  // Store accumulated pending changes for legacy fallback (when REALM not connected)
+  const [pendingStyleChanges, setPendingStyleChanges] = useState<Partial<ElementStyles>>({});
+  const [pendingTextChange, setPendingTextChange] = useState<string | null>(null);
 
-  // VS Code bridge for applying changes to code
-  const { applyElementChanges: applyChangesToCode } = useVSCodeBridge();
+  // VS Code bridge for applying changes to code - with REALM API
+  const { 
+    applyElementChanges: applyChangesToCode,
+    // REALM Protocol API
+    realmConnectionState,
+    isRealmConnected,
+    selectedRealmElement,
+    sendRealmStyleChange,
+    sendRealmTextChange,
+    commitRealmChanges,
+    rollbackRealmChanges,
+  } = useVSCodeBridge();
 
   // Utiliser le nouveau sélecteur DOM cross-origin avec postMessage
   const {
@@ -331,21 +350,87 @@ export function LivePreviewWithSelector({
       if (value) styleRecord[key] = value;
     }
     modifyElementStyle(selector, styleRecord);
-  }, [modifyElementStyle]);
+    
+    // Mark pending changes for REALM
+    setHasPendingChanges(true);
+    
+    // Accumulate style changes for legacy fallback
+    setPendingStyleChanges(prev => ({ ...prev, ...styles }));
+    
+    // If REALM is connected and we have a realmId, use REALM protocol (preview mode)
+    if (isRealmConnected && currentRealmId) {
+      sendRealmStyleChange(currentRealmId, styles as Record<string, string>, true);
+    }
+  }, [modifyElementStyle, isRealmConnected, currentRealmId, sendRealmStyleChange]);
 
   // Handle text changes - apply live to iframe
   const handleTextChange = useCallback((selector: string, text: string) => {
     console.log('[LivePreview] Text change:', selector, text);
     modifyElementText(selector, text);
-  }, [modifyElementText]);
+    
+    // Mark pending changes for REALM
+    setHasPendingChanges(true);
+    
+    // Store text change for legacy fallback
+    setPendingTextChange(text);
+    
+    // If REALM is connected and we have a realmId, use REALM protocol (preview mode)
+    if (isRealmConnected && currentRealmId) {
+      sendRealmTextChange(currentRealmId, text, true);
+    }
+  }, [modifyElementText, isRealmConnected, currentRealmId, sendRealmTextChange]);
 
   // Handle applying changes to actual code files
   const handleApplyToCode = useCallback((selector: string, changes: ElementChanges) => {
     console.log('[LivePreview] Apply to code:', selector, changes);
     
-    // Send to VS Code extension to apply changes to source files
-    applyChangesToCode(selector, changes as Record<string, unknown>, url);
-  }, [applyChangesToCode, url]);
+    // If REALM is connected and we have a realmId, commit via REALM
+    if (isRealmConnected && currentRealmId) {
+      console.log('[LivePreview/REALM] Committing changes via REALM protocol');
+      commitRealmChanges(currentRealmId);
+      setHasPendingChanges(false);
+      setPendingStyleChanges({});
+      setPendingTextChange(null);
+    } else {
+      // Fallback: Send to VS Code extension to apply changes to source files
+      // Build the changes object from accumulated pending changes
+      const accumulatedChanges: ElementChanges = {
+        ...changes,
+      };
+      
+      // Add pending style changes
+      if (Object.keys(pendingStyleChanges).length > 0) {
+        accumulatedChanges.styles = pendingStyleChanges;
+      }
+      
+      // Add pending text change
+      if (pendingTextChange !== null) {
+        accumulatedChanges.text = pendingTextChange;
+      }
+      
+      console.log('[LivePreview] Fallback: Using legacy applyElementChanges with accumulated changes:', accumulatedChanges);
+      applyChangesToCode(selector, accumulatedChanges as Record<string, unknown>, url);
+      
+      // Clear pending changes after sending
+      setHasPendingChanges(false);
+      setPendingStyleChanges({});
+      setPendingTextChange(null);
+    }
+  }, [applyChangesToCode, url, isRealmConnected, currentRealmId, commitRealmChanges, pendingStyleChanges, pendingTextChange]);
+  
+  // Handle rollback (undo pending changes)
+  const handleRollback = useCallback(() => {
+    if (currentRealmId && isRealmConnected) {
+      console.log('[LivePreview/REALM] Rolling back changes');
+      rollbackRealmChanges(currentRealmId);
+    }
+    // Clear pending changes
+    setHasPendingChanges(false);
+    setPendingStyleChanges({});
+    setPendingTextChange(null);
+    // Also undo the visual changes in iframe
+    undoLastModification?.();
+  }, [currentRealmId, isRealmConnected, rollbackRealmChanges, undoLastModification]);
 
   // Debug: Log quand isSelecting change
   useEffect(() => {
@@ -418,6 +503,21 @@ export function LivePreviewWithSelector({
                   {isEditing ? "Editing..." : "Edit Element"}
                 </Button>
               )}
+              
+              {/* REALM connection indicator */}
+              <div className="flex items-center gap-1 ml-2">
+                <div 
+                  className={cn(
+                    "size-2 rounded-full",
+                    realmConnectionState === 'connected' && "bg-green-500",
+                    realmConnectionState === 'connecting' && "bg-yellow-500 animate-pulse",
+                    realmConnectionState === 'disconnected' && "bg-zinc-500",
+                    realmConnectionState === 'error' && "bg-red-500",
+                  )}
+                  title={`REALM: ${realmConnectionState}`}
+                />
+                <span className="text-xs text-zinc-500">REALM</span>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
