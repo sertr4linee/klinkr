@@ -198,9 +198,14 @@ export class PanelManager {
   private async startDevMode(): Promise<void> {
     const wwwPath = this.getWwwPath();
 
+    this.log(`Extension path: ${this.context.extensionPath}`);
+    this.log(`Calculated www path: ${wwwPath}`);
+
     if (!fs.existsSync(wwwPath)) {
       throw new Error(`Panel directory not found: ${wwwPath}`);
     }
+
+    this.log(`www directory found!`);
 
     // Check for node_modules
     const nodeModulesPath = path.join(wwwPath, 'node_modules');
@@ -470,10 +475,41 @@ export class PanelManager {
   }
 
   private getWwwPath(): string {
-    // Get the extension's installation path
-    const extensionPath = this.context.extensionPath;
-    // www/ is a sibling to extension/
-    return path.join(extensionPath, '..', 'www');
+    // Try multiple strategies to find www folder
+
+    // Strategy 1: Check if we're in development mode (extension source folder)
+    // In dev mode, extensionPath is the actual source folder
+    const devWwwPath = path.join(this.context.extensionPath, '..', 'www');
+    if (fs.existsSync(devWwwPath)) {
+      return devWwwPath;
+    }
+
+    // Strategy 2: Check workspace folders
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders && workspaceFolders.length > 0) {
+      for (const folder of workspaceFolders) {
+        // Check if www exists in this workspace
+        const wwwInWorkspace = path.join(folder.uri.fsPath, 'www');
+        if (fs.existsSync(wwwInWorkspace)) {
+          return wwwInWorkspace;
+        }
+        // Check if we're inside the hataystudio project
+        const parentWww = path.join(folder.uri.fsPath, '..', 'www');
+        if (fs.existsSync(parentWww)) {
+          return parentWww;
+        }
+      }
+    }
+
+    // Strategy 3: Use configuration (user can set custom path)
+    const config = vscode.workspace.getConfiguration('aiAppBuilder');
+    const customPath = config.get<string>('panelPath');
+    if (customPath && fs.existsSync(customPath)) {
+      return customPath;
+    }
+
+    // Fallback: return dev path and let caller handle the error
+    return devWwwPath;
   }
 
   private getEnhancedPath(projectPath: string): string {

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { PanelManager, PanelState } from './panelManager';
 
 /**
  * WebviewViewProvider for the AI App Builder sidebar panel
@@ -7,13 +8,34 @@ import * as vscode from 'vscode';
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'aiAppBuilder.panel';
   private _view?: vscode.WebviewView;
-  private _port: number;
+  private _panelManager?: PanelManager;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
-    port: number
-  ) {
-    this._port = port;
+    private readonly _context: vscode.ExtensionContext
+  ) {}
+
+  public setPanelManager(panelManager: PanelManager) {
+    this._panelManager = panelManager;
+
+    // Listen for state changes to refresh the view
+    panelManager.setCallbacks({
+      onStateChange: (state: PanelState) => {
+        if (this._view) {
+          this._view.webview.html = this._getHtmlForWebview(this._view.webview);
+        }
+      },
+      onOutput: () => {}
+    });
+  }
+
+  private getPanelPort(): number {
+    const config = vscode.workspace.getConfiguration('aiAppBuilder');
+    return this._panelManager?.getPort() || config.get<number>('panelPort', 3001);
+  }
+
+  private getPanelState(): PanelState {
+    return this._panelManager?.getState() || 'stopped';
   }
 
   public resolveWebviewView(
@@ -34,25 +56,43 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage(async (data) => {
       switch (data.type) {
         case 'openExternal':
-          vscode.env.openExternal(vscode.Uri.parse(`http://127.0.0.1:${this._port}`));
+          vscode.env.openExternal(vscode.Uri.parse(`http://127.0.0.1:${this.getPanelPort()}`));
           break;
         case 'refresh':
           webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+          break;
+        case 'startPanel':
+          vscode.commands.executeCommand('aiAppBuilder.startPanel');
+          break;
+        case 'stopPanel':
+          vscode.commands.executeCommand('aiAppBuilder.stopPanel');
+          break;
+        case 'showLogs':
+          vscode.commands.executeCommand('aiAppBuilder.showPanelLogs');
           break;
       }
     });
   }
 
-  public updatePort(port: number) {
-    this._port = port;
+  public refresh() {
     if (this._view) {
       this._view.webview.html = this._getHtmlForWebview(this._view.webview);
     }
   }
 
   private _getHtmlForWebview(webview: vscode.Webview): string {
-    const panelUrl = `http://127.0.0.1:${this._port}`;
+    const panelPort = this.getPanelPort();
+    const panelUrl = `http://127.0.0.1:${panelPort}`;
+    const panelState = this.getPanelState();
     
+    // Show different UI based on panel state
+    if (panelState === 'stopped' || panelState === 'error') {
+      return this._getStoppedHtml(panelState);
+    } else if (panelState === 'starting' || panelState === 'stopping') {
+      return this._getLoadingHtml(panelState);
+    }
+
+    // Panel is running - show iframe
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -60,11 +100,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI App Builder</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       width: 100%;
       height: 100vh;
@@ -72,11 +108,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       background: var(--vscode-editor-background);
       font-family: var(--vscode-font-family);
     }
-    .container {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-    }
+    .container { display: flex; flex-direction: column; height: 100vh; }
     .toolbar {
       display: flex;
       gap: 8px;
@@ -93,9 +125,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       cursor: pointer;
       font-size: 12px;
     }
-    .toolbar button:hover {
-      background: var(--vscode-button-hoverBackground);
+    .toolbar button:hover { background: var(--vscode-button-hoverBackground); }
+    .toolbar button.secondary {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
     }
+    .toolbar button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
     .status {
       display: flex;
       align-items: center;
@@ -110,96 +145,175 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       border-radius: 50%;
       background: var(--vscode-charts-green);
     }
-    .status-dot.disconnected {
-      background: var(--vscode-charts-red);
-    }
-    iframe {
-      flex: 1;
-      width: 100%;
-      border: none;
-      background: var(--vscode-editor-background);
-    }
-    .loading {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      gap: 16px;
-      color: var(--vscode-foreground);
-    }
-    .loading-spinner {
-      width: 32px;
-      height: 32px;
-      border: 3px solid var(--vscode-progressBar-background);
-      border-top-color: var(--vscode-button-background);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    .error-message {
-      text-align: center;
-      padding: 20px;
-      color: var(--vscode-errorForeground);
-    }
+    .status-dot.disconnected { background: var(--vscode-charts-red); }
+    iframe { flex: 1; width: 100%; border: none; background: var(--vscode-editor-background); }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="toolbar">
       <button onclick="refresh()">↻ Refresh</button>
-      <button onclick="openExternal()">↗ Open in Browser</button>
+      <button onclick="openExternal()">↗ Browser</button>
+      <button class="secondary" onclick="stopPanel()">◼ Stop</button>
       <div class="status">
         <span class="status-dot" id="statusDot"></span>
-        <span id="statusText">Connecting...</span>
+        <span id="statusText">Connected</span>
       </div>
     </div>
-    <iframe 
-      id="panel" 
-      src="${panelUrl}"
-      onload="onFrameLoad()"
-      onerror="onFrameError()"
-    ></iframe>
+    <iframe id="panel" src="${panelUrl}" onload="onFrameLoad()" onerror="onFrameError()"></iframe>
   </div>
-
   <script>
     const vscode = acquireVsCodeApi();
     const iframe = document.getElementById('panel');
     const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
+    function refresh() { vscode.postMessage({ type: 'refresh' }); }
+    function openExternal() { vscode.postMessage({ type: 'openExternal' }); }
+    function stopPanel() { vscode.postMessage({ type: 'stopPanel' }); }
+    function onFrameLoad() { statusDot.classList.remove('disconnected'); statusText.textContent = 'Connected'; }
+    function onFrameError() { statusDot.classList.add('disconnected'); statusText.textContent = 'Error'; }
+  </script>
+</body>
+</html>`;
+  }
 
-    function refresh() {
-      iframe.src = iframe.src;
-      statusText.textContent = 'Refreshing...';
+  private _getStoppedHtml(state: PanelState): string {
+    const isError = state === 'error';
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI App Builder</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--vscode-editor-background);
+      font-family: var(--vscode-font-family);
     }
-
-    function openExternal() {
-      vscode.postMessage({ type: 'openExternal' });
+    .container {
+      text-align: center;
+      padding: 32px;
     }
-
-    function onFrameLoad() {
-      statusDot.classList.remove('disconnected');
-      statusText.textContent = 'Connected';
+    .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
     }
-
-    function onFrameError() {
-      statusDot.classList.add('disconnected');
-      statusText.textContent = 'Connection failed';
+    h2 {
+      color: var(--vscode-foreground);
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 8px;
     }
+    p {
+      color: var(--vscode-descriptionForeground);
+      font-size: 13px;
+      margin-bottom: 24px;
+    }
+    .error { color: var(--vscode-errorForeground); }
+    button {
+      padding: 8px 20px;
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      margin: 4px;
+    }
+    button:hover { background: var(--vscode-button-hoverBackground); }
+    button.secondary {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+    }
+    button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">${isError ? '⚠️' : '○'}</div>
+    <h2>${isError ? 'Panel Error' : 'Panel Stopped'}</h2>
+    <p class="${isError ? 'error' : ''}">${isError ? 'An error occurred. Check the logs for details.' : 'The Next.js panel is not running.'}</p>
+    <button onclick="startPanel()">▶ Start Panel</button>
+    <button class="secondary" onclick="showLogs()">📋 View Logs</button>
+  </div>
+  <script>
+    const vscode = acquireVsCodeApi();
+    function startPanel() { vscode.postMessage({ type: 'startPanel' }); }
+    function showLogs() { vscode.postMessage({ type: 'showLogs' }); }
+  </script>
+</body>
+</html>`;
+  }
 
-    // Check connection status periodically
-    setInterval(async () => {
-      try {
-        const response = await fetch('${panelUrl}/api/health', { mode: 'no-cors' });
-        statusDot.classList.remove('disconnected');
-        statusText.textContent = 'Connected';
-      } catch (e) {
-        statusDot.classList.add('disconnected');
-        statusText.textContent = 'Disconnected';
-      }
-    }, 5000);
+  private _getLoadingHtml(state: PanelState): string {
+    const isStarting = state === 'starting';
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI App Builder</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--vscode-editor-background);
+      font-family: var(--vscode-font-family);
+    }
+    .container { text-align: center; padding: 32px; }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--vscode-progressBar-background);
+      border-top-color: var(--vscode-button-background);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    h2 {
+      color: var(--vscode-foreground);
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    p {
+      color: var(--vscode-descriptionForeground);
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+    button {
+      padding: 6px 16px;
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner"></div>
+    <h2>${isStarting ? 'Starting Panel...' : 'Stopping Panel...'}</h2>
+    <p>${isStarting ? 'Installing dependencies and starting Next.js' : 'Gracefully shutting down'}</p>
+    <button onclick="showLogs()">📋 View Logs</button>
+  </div>
+  <script>
+    const vscode = acquireVsCodeApi();
+    function showLogs() { vscode.postMessage({ type: 'showLogs' }); }
   </script>
 </body>
 </html>`;

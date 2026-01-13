@@ -59,8 +59,10 @@ export interface WebSocketMessage {
     // MCP servers
     | 'detectMCPServers' | 'mcpServersDetected'
     // Copilot History
-    | 'getCopilotHistory' | 'copilotHistory' | 'getCopilotHistoryConfig' | 'copilotHistoryConfig' 
-    | 'updateCopilotHistoryConfig' | 'getAvailableCopilotVersions' | 'availableCopilotVersions';
+    | 'getCopilotHistory' | 'copilotHistory' | 'getCopilotHistoryConfig' | 'copilotHistoryConfig'
+    | 'updateCopilotHistoryConfig' | 'getAvailableCopilotVersions' | 'availableCopilotVersions'
+    // Project creation
+    | 'createProject' | 'projectCreationLog' | 'projectCreationComplete' | 'projectCreationError';
   payload?: any;
   requestId?: string;
 }
@@ -104,6 +106,7 @@ export interface NextJsProject {
   port: number;
   status: 'stopped' | 'starting' | 'installing' | 'running' | 'error';
   error?: string;
+  domBridgeSetup?: boolean;
 }
 
 export interface MCPServer {

@@ -18,6 +18,7 @@ import {
   TargetIcon,
   BoxSelectIcon,
   PencilIcon,
+  ExternalLinkIcon,
 } from "lucide-react";
 import {
   createContext,
@@ -405,7 +406,7 @@ export function LivePreviewWithSelector({
       
       // Add pending text change
       if (pendingTextChange !== null) {
-        accumulatedChanges.text = pendingTextChange;
+        accumulatedChanges.textContent = pendingTextChange;
       }
       
       console.log('[LivePreview] Fallback: Using legacy applyElementChanges with accumulated changes:', accumulatedChanges);
@@ -528,10 +529,10 @@ export function LivePreviewWithSelector({
                     "bg-zinc-600"
                   )} />
                 </div>
-                <div className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-1.5 pl-8 pr-10 text-xs text-zinc-400 font-mono flex items-center transition-colors group-hover:border-zinc-700">
+                <div className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-1.5 pl-8 pr-16 text-xs text-zinc-400 font-mono flex items-center transition-colors group-hover:border-zinc-700">
                   <span className="truncate">{url}</span>
                 </div>
-                <div className="absolute inset-y-0 right-1 flex items-center">
+                <div className="absolute inset-y-0 right-1 flex items-center gap-0.5">
                   <Button
                     variant="ghost"
                     size="icon"
@@ -540,6 +541,15 @@ export function LivePreviewWithSelector({
                     title="Refresh Preview"
                   >
                     <RefreshCwIcon className="size-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => window.open(url, '_blank')}
+                    className="size-6 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded-md"
+                    title="Open in new tab"
+                  >
+                    <ExternalLinkIcon className="size-3" />
                   </Button>
                 </div>
               </div>

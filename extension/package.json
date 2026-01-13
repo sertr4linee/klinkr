@@ -130,6 +130,11 @@
             "Run 'npm run start' with pre-built files for production"
           ],
           "description": "Panel mode: development (hot reload) or production (pre-built)"
+        },
+        "aiAppBuilder.panelPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the www folder (leave empty for auto-detection)"
         }
       }
     }

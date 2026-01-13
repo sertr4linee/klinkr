@@ -30,6 +30,24 @@ interface AvailableCopilotVersions {
   insiders: boolean;
 }
 
+// Types Project Creation
+interface ProjectConfig {
+  name: string;
+  framework: string;
+  features: string[];
+  styling: string;
+  database: string | null;
+  auth: string | null;
+  packageManager: string;
+}
+
+interface ProjectCreationLog {
+  id: string;
+  type: 'info' | 'success' | 'error' | 'warning' | 'command';
+  message: string;
+  timestamp: Date;
+}
+
 // ============================================================================
 // REALM Integration
 // ============================================================================
@@ -72,6 +90,10 @@ interface UseVSCodeBridgeReturn {
   isDetectingProjects: boolean;
   // DOM Bridge setup
   setupDOMBridge: (projectPath: string) => void;
+  isDOMBridgeSetupInProgress: boolean;
+  domBridgeSetupComplete: boolean;
+  domBridgeSetupError: string | null;
+  resetDOMBridgeSetup: () => void;
   // MCP server management
   mcpServers: MCPServer[];
   detectMCPServers: () => void;
@@ -110,6 +132,15 @@ interface UseVSCodeBridgeReturn {
   getCopilotHistoryConfig: () => void;
   updateCopilotHistoryConfig: (config: Partial<CopilotHistoryConfig>) => void;
   getAvailableCopilotVersions: () => void;
+  // ============================================================================
+  // Project Creation
+  // ============================================================================
+  createProject: (config: ProjectConfig) => void;
+  projectCreationLogs: ProjectCreationLog[];
+  isCreatingProject: boolean;
+  projectCreationComplete: boolean;
+  projectCreationError: string | null;
+  resetProjectCreation: () => void;
 }
 
 export function useVSCodeBridge(): UseVSCodeBridgeReturn {
@@ -126,7 +157,12 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
   const [isDetectingProjects, setIsDetectingProjects] = useState(false);
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
   const [isDetectingMCP, setIsDetectingMCP] = useState(false);
-  
+
+  // DOM Bridge setup state
+  const [isDOMBridgeSetupInProgress, setIsDOMBridgeSetupInProgress] = useState(false);
+  const [domBridgeSetupComplete, setDOMBridgeSetupComplete] = useState(false);
+  const [domBridgeSetupError, setDOMBridgeSetupError] = useState<string | null>(null);
+
   // Activity tracking - real-time events
   const [activities, setActivities] = useState<Activity[]>([]);
   const activityCounterRef = useRef(0);
@@ -147,7 +183,15 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
   const [copilotConversations, setCopilotConversations] = useState<CopilotConversation[]>([]);
   const [copilotHistoryConfig, setCopilotHistoryConfig] = useState<CopilotHistoryConfig | null>(null);
   const [availableCopilotVersions, setAvailableCopilotVersions] = useState<AvailableCopilotVersions | null>(null);
-  
+
+  // ============================================================================
+  // Project Creation State
+  // ============================================================================
+  const [projectCreationLogs, setProjectCreationLogs] = useState<ProjectCreationLog[]>([]);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [projectCreationComplete, setProjectCreationComplete] = useState(false);
+  const [projectCreationError, setProjectCreationError] = useState<string | null>(null);
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingRequestsRef = useRef<Map<string, (success: boolean) => void>>(new Map());
@@ -412,16 +456,41 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
 
             case 'nextJsProjectStatus':
               console.log('[Bridge] Next.js project status update:', message.payload);
-              setNextJsProjects(prev => prev.map(project => 
+              setNextJsProjects(prev => prev.map(project =>
                 project.path === message.payload.path
-                  ? { 
-                      ...project, 
-                      status: message.payload.status, 
+                  ? {
+                      ...project,
+                      status: message.payload.status,
                       port: message.payload.port ?? project.port,
-                      error: message.payload.error 
+                      error: message.payload.error
                     }
                   : project
               ));
+              break;
+
+            // ============== Project Creation ==============
+            case 'projectCreationLog':
+              console.log('[Bridge] Project creation log:', message.payload);
+              setProjectCreationLogs(prev => [...prev, {
+                id: `${Date.now()}-${Math.random()}`,
+                type: message.payload.type,
+                message: message.payload.message,
+                timestamp: new Date(message.payload.timestamp)
+              }]);
+              break;
+
+            case 'projectCreationComplete':
+              console.log('[Bridge] Project creation complete:', message.payload);
+              setIsCreatingProject(false);
+              setProjectCreationComplete(true);
+              // Refresh project list
+              wsRef.current?.send(JSON.stringify({ type: 'detectNextJsProjects' }));
+              break;
+
+            case 'projectCreationError':
+              console.error('[Bridge] Project creation error:', message.payload.error);
+              setIsCreatingProject(false);
+              setProjectCreationError(message.payload.error);
               break;
 
             case 'mcpServersDetected':
@@ -448,12 +517,18 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
 
             case 'domBridgeSetupComplete':
               console.log('[Bridge] DOM Bridge setup complete:', message.payload);
+              setIsDOMBridgeSetupInProgress(false);
+              setDOMBridgeSetupComplete(true);
+              setDOMBridgeSetupError(null);
               // Refresh projects to update DOM selector status
               wsRef.current?.send(JSON.stringify({ type: 'detectNextJsProjects' }));
               break;
 
             case 'domBridgeSetupError':
               console.error('[Bridge] DOM Bridge setup error:', message.payload.error);
+              setIsDOMBridgeSetupInProgress(false);
+              setDOMBridgeSetupComplete(false);
+              setDOMBridgeSetupError(message.payload.error);
               setError(message.payload.error);
               break;
 
@@ -692,10 +767,22 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
     }
 
     console.log('[setupDOMBridge] Setting up DOM Bridge for:', projectPath);
+
+    // Reset state before starting
+    setIsDOMBridgeSetupInProgress(true);
+    setDOMBridgeSetupComplete(false);
+    setDOMBridgeSetupError(null);
+
     wsRef.current.send(JSON.stringify({
       type: 'setupDOMBridge',
       payload: { projectPath }
     }));
+  }, []);
+
+  const resetDOMBridgeSetup = useCallback(() => {
+    setIsDOMBridgeSetupInProgress(false);
+    setDOMBridgeSetupComplete(false);
+    setDOMBridgeSetupError(null);
   }, []);
 
   const detectMCPServers = useCallback(() => {
@@ -853,6 +940,45 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
     wsRef.current.send(JSON.stringify({ type: 'getAvailableCopilotVersions' }));
   }, []);
 
+  // ============================================================================
+  // Project Creation Methods
+  // ============================================================================
+
+  /**
+   * Create a new project with the given configuration
+   * Sends WebSocket message to the extension which runs the creation commands
+   */
+  const createProject = useCallback((config: ProjectConfig) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      setError('Not connected to VS Code extension');
+      return;
+    }
+
+    console.log('[createProject] Starting project creation:', config);
+
+    // Reset state before starting
+    setProjectCreationLogs([]);
+    setProjectCreationComplete(false);
+    setProjectCreationError(null);
+    setIsCreatingProject(true);
+
+    wsRef.current.send(JSON.stringify({
+      type: 'createProject',
+      payload: config
+    }));
+  }, []);
+
+  /**
+   * Reset project creation state
+   * Call this when user wants to start over or dismiss the creation wizard
+   */
+  const resetProjectCreation = useCallback(() => {
+    setProjectCreationLogs([]);
+    setIsCreatingProject(false);
+    setProjectCreationComplete(false);
+    setProjectCreationError(null);
+  }, []);
+
   return {
     models,
     isConnected,
@@ -874,6 +1000,10 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
     isDetectingProjects,
     // DOM Bridge setup
     setupDOMBridge,
+    isDOMBridgeSetupInProgress,
+    domBridgeSetupComplete,
+    domBridgeSetupError,
+    resetDOMBridgeSetup,
     // MCP server management
     mcpServers,
     detectMCPServers,
@@ -904,5 +1034,14 @@ export function useVSCodeBridge(): UseVSCodeBridgeReturn {
     getCopilotHistoryConfig: getCopilotHistoryConfigFn,
     updateCopilotHistoryConfig,
     getAvailableCopilotVersions: getAvailableCopilotVersionsFn,
+    // ============================================================================
+    // Project Creation
+    // ============================================================================
+    createProject,
+    projectCreationLogs,
+    isCreatingProject,
+    projectCreationComplete,
+    projectCreationError,
+    resetProjectCreation,
   };
 }

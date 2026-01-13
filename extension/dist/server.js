@@ -363,6 +363,9 @@ class AppBuilderServer {
             case 'stopNextJsProject':
                 await this.stopNextJsProject(ws, message.payload.path);
                 break;
+            case 'createProject':
+                await this.handleCreateProject(ws, message.payload, message.requestId);
+                break;
             case 'detectMCPServers':
                 await this.detectAndSendMCPServers(ws);
                 break;
@@ -772,13 +775,16 @@ class AppBuilderServer {
                     const hasNextConfig = fs.existsSync(path.join(dirPath, 'next.config.js')) ||
                         fs.existsSync(path.join(dirPath, 'next.config.mjs')) ||
                         fs.existsSync(path.join(dirPath, 'next.config.ts'));
+                    // Check if DOM Bridge is already set up
+                    const domBridgeSetup = this.checkDOMBridgeSetup(dirPath);
                     projects.push({
                         path: dirPath,
                         name: packageJson.name || path.basename(dirPath),
                         packageJsonPath,
                         hasNextConfig,
                         port: 3000,
-                        status: 'stopped'
+                        status: 'stopped',
+                        domBridgeSetup
                     });
                     return; // Don't scan subdirectories of a Next.js project
                 }
@@ -798,6 +804,39 @@ class AppBuilderServer {
         }
         catch (error) {
             console.error(`[Server] Error scanning ${dirPath}:`, error);
+        }
+    }
+    /**
+     * Check if DOM Bridge is already set up in a Next.js project
+     */
+    checkDOMBridgeSetup(projectPath) {
+        try {
+            // Check both possible app directories
+            const appDir = path.join(projectPath, 'app');
+            const srcAppDir = path.join(projectPath, 'src', 'app');
+            let targetAppDir = appDir;
+            if (!fs.existsSync(appDir) && fs.existsSync(srcAppDir)) {
+                targetAppDir = srcAppDir;
+            }
+            if (!fs.existsSync(targetAppDir)) {
+                return false;
+            }
+            // Check if DOMSelectorBridge.tsx exists
+            const bridgeFilePath = path.join(targetAppDir, 'DOMSelectorBridge.tsx');
+            if (!fs.existsSync(bridgeFilePath)) {
+                return false;
+            }
+            // Check if layout.tsx imports DOMSelectorBridge
+            const layoutFilePath = path.join(targetAppDir, 'layout.tsx');
+            if (!fs.existsSync(layoutFilePath)) {
+                return false;
+            }
+            const layoutContent = fs.readFileSync(layoutFilePath, 'utf-8');
+            return layoutContent.includes('DOMSelectorBridge');
+        }
+        catch (error) {
+            console.error(`[Server] Error checking DOM Bridge setup:`, error);
+            return false;
         }
     }
     async detectAndSendNextJsProjects(ws) {
@@ -827,6 +866,22 @@ class AppBuilderServer {
             });
             return;
         }
+        // ✅ Vérifier si le port est disponible
+        const isPortFree = await this.processManager.isPortAvailable(port);
+        if (!isPortFree) {
+            console.log(`[Server] Port ${port} is busy, finding alternative...`);
+            try {
+                port = await this.processManager.findAvailablePort(port, 20);
+                console.log(`[Server] Using alternative port: ${port}`);
+            }
+            catch (error) {
+                this.sendToClient(ws, {
+                    type: 'nextJsProjectStatus',
+                    payload: { path: projectPath, status: 'error', error: `No available port found starting from ${port}` }
+                });
+                return;
+            }
+        }
         // Update status to starting
         project.status = 'starting';
         project.port = port;
@@ -841,7 +896,65 @@ class AppBuilderServer {
             const hasPnpmLock = fs.existsSync(path.join(projectPath, 'pnpm-lock.yaml'));
             const hasBunLock = fs.existsSync(path.join(projectPath, 'bun.lockb')) ||
                 fs.existsSync(path.join(projectPath, 'bun.lock'));
+            const hasNodeModules = fs.existsSync(path.join(projectPath, 'node_modules'));
             const homeDir = process.env.HOME || '/Users/moneyprinter';
+            // ✅ Installer les dépendances si nécessaire
+            if (!hasNodeModules) {
+                console.log(`[Server] node_modules not found, installing dependencies...`);
+                this.sendToClient(ws, {
+                    type: 'nextJsProjectStatus',
+                    payload: { path: projectPath, status: 'installing' }
+                });
+                let installCommand;
+                if (hasBunLock) {
+                    installCommand = `"${homeDir}/.bun/bin/bun" install`;
+                }
+                else if (hasPnpmLock) {
+                    installCommand = `pnpm install`;
+                }
+                else if (hasYarnLock) {
+                    installCommand = `yarn install`;
+                }
+                else {
+                    installCommand = `npm install`;
+                }
+                try {
+                    await new Promise((resolve, reject) => {
+                        const installProcess = (0, child_process_1.spawn)('/bin/zsh', ['-c', installCommand], {
+                            cwd: projectPath,
+                            stdio: ['ignore', 'pipe', 'pipe'],
+                            env: { ...process.env, HOME: homeDir }
+                        });
+                        installProcess.stdout?.on('data', (data) => {
+                            console.log(`[Install ${project.name}] ${data.toString()}`);
+                        });
+                        installProcess.stderr?.on('data', (data) => {
+                            console.error(`[Install ${project.name}] ${data.toString()}`);
+                        });
+                        installProcess.on('error', reject);
+                        installProcess.on('exit', (code) => {
+                            if (code === 0) {
+                                resolve();
+                            }
+                            else {
+                                reject(new Error(`Installation failed with code ${code}`));
+                            }
+                        });
+                    });
+                    console.log(`[Server] Dependencies installed successfully`);
+                }
+                catch (error) {
+                    console.error(`[Server] Failed to install dependencies:`, error);
+                    project.status = 'error';
+                    project.error = `Failed to install dependencies: ${error}`;
+                    this.nextJsProjects.set(projectPath, project);
+                    this.sendToClient(ws, {
+                        type: 'nextJsProjectStatus',
+                        payload: { path: projectPath, status: 'error', error: project.error }
+                    });
+                    return;
+                }
+            }
             // Build the full command with absolute paths
             let fullCommand;
             if (hasBunLock) {
@@ -894,6 +1007,12 @@ class AppBuilderServer {
                     this.broadcastToAll({
                         type: 'nextJsProjectStatus',
                         payload: { path: projectPath, status: 'running', port }
+                    });
+                    // ✅ Notification VS Code
+                    vscode.window.showInformationMessage(`✅ ${project.name} is running on http://localhost:${port}`, 'Open in Browser').then(selection => {
+                        if (selection === 'Open in Browser') {
+                            vscode.env.openExternal(vscode.Uri.parse(`http://localhost:${port}`));
+                        }
                     });
                 }
             });
@@ -982,6 +1101,260 @@ class AppBuilderServer {
         });
     }
     // ============== End Next.js Project Management ==============
+    // ============== Project Creation ==============
+    /**
+     * Handle project creation request
+     */
+    async handleCreateProject(ws, config, requestId) {
+        console.log('[Server] Creating project:', config);
+        const sendLog = (type, message) => {
+            this.sendToClient(ws, {
+                type: 'projectCreationLog',
+                payload: { type, message, timestamp: Date.now() },
+                requestId
+            });
+        };
+        try {
+            // Get workspace path
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders || workspaceFolders.length === 0) {
+                throw new Error('No workspace folder open');
+            }
+            const workspacePath = workspaceFolders[0].uri.fsPath;
+            const projectPath = path.join(workspacePath, config.name);
+            // Check if directory already exists
+            if (fs.existsSync(projectPath)) {
+                throw new Error(`Directory "${config.name}" already exists`);
+            }
+            sendLog('info', `Creating project "${config.name}"...`);
+            // Determine package manager command
+            const homeDir = process.env.HOME || '/Users/moneyprinter';
+            let pmCmd;
+            let pmExec;
+            switch (config.packageManager) {
+                case 'bun':
+                    pmCmd = `${homeDir}/.bun/bin/bun`;
+                    pmExec = `${homeDir}/.bun/bin/bunx`;
+                    break;
+                case 'pnpm':
+                    pmCmd = 'pnpm';
+                    pmExec = 'pnpm dlx';
+                    break;
+                case 'yarn':
+                    pmCmd = 'yarn';
+                    pmExec = 'yarn dlx';
+                    break;
+                default:
+                    pmCmd = 'npm';
+                    pmExec = 'npx';
+            }
+            // Build create command based on framework
+            let createCommand;
+            const useTs = config.features.includes('typescript');
+            const useTailwind = config.features.includes('tailwind') || config.styling === 'tailwind';
+            const useEslint = config.features.includes('eslint');
+            switch (config.framework) {
+                case 'nextjs':
+                    createCommand = `${pmExec} create-next-app@latest ${config.name} --yes`;
+                    if (useTs)
+                        createCommand += ' --typescript';
+                    if (useTailwind)
+                        createCommand += ' --tailwind';
+                    if (useEslint)
+                        createCommand += ' --eslint';
+                    createCommand += ' --app --src-dir --import-alias "@/*"';
+                    break;
+                case 'vite-react':
+                    createCommand = `${pmExec} create-vite@latest ${config.name} --template ${useTs ? 'react-ts' : 'react'}`;
+                    break;
+                case 'vite-vue':
+                    createCommand = `${pmExec} create-vite@latest ${config.name} --template ${useTs ? 'vue-ts' : 'vue'}`;
+                    break;
+                case 'vite-svelte':
+                    createCommand = `${pmExec} create-vite@latest ${config.name} --template ${useTs ? 'svelte-ts' : 'svelte'}`;
+                    break;
+                case 'astro':
+                    createCommand = `${pmExec} create-astro@latest ${config.name} --template minimal --yes`;
+                    if (useTs)
+                        createCommand += ' --typescript strict';
+                    break;
+                case 'remix':
+                    createCommand = `${pmExec} create-remix@latest ${config.name} --yes`;
+                    break;
+                default:
+                    createCommand = `${pmExec} create-vite@latest ${config.name} --template ${useTs ? 'react-ts' : 'react'}`;
+            }
+            sendLog('command', `$ ${createCommand}`);
+            // Execute create command
+            await this.executeCommand(createCommand, workspacePath, sendLog);
+            sendLog('success', 'Project scaffolded successfully!');
+            // Install additional dependencies based on config
+            const depsToInstall = [];
+            const devDepsToInstall = [];
+            // Tailwind (for non-Next.js projects)
+            if (useTailwind && config.framework !== 'nextjs') {
+                devDepsToInstall.push('tailwindcss', 'postcss', 'autoprefixer');
+                sendLog('info', 'Adding Tailwind CSS...');
+            }
+            // Prettier
+            if (config.features.includes('prettier')) {
+                devDepsToInstall.push('prettier');
+                if (useTailwind)
+                    devDepsToInstall.push('prettier-plugin-tailwindcss');
+                sendLog('info', 'Adding Prettier...');
+            }
+            // Database
+            if (config.database) {
+                switch (config.database) {
+                    case 'prisma-postgres':
+                    case 'prisma-sqlite':
+                        depsToInstall.push('@prisma/client');
+                        devDepsToInstall.push('prisma');
+                        sendLog('info', 'Adding Prisma...');
+                        break;
+                    case 'drizzle-postgres':
+                        depsToInstall.push('drizzle-orm', 'pg');
+                        devDepsToInstall.push('drizzle-kit', '@types/pg');
+                        sendLog('info', 'Adding Drizzle ORM...');
+                        break;
+                    case 'mongoose':
+                        depsToInstall.push('mongoose');
+                        sendLog('info', 'Adding Mongoose...');
+                        break;
+                    case 'supabase':
+                        depsToInstall.push('@supabase/supabase-js');
+                        sendLog('info', 'Adding Supabase...');
+                        break;
+                }
+            }
+            // Auth
+            if (config.auth) {
+                switch (config.auth) {
+                    case 'nextauth':
+                        depsToInstall.push('next-auth');
+                        sendLog('info', 'Adding NextAuth.js...');
+                        break;
+                    case 'clerk':
+                        depsToInstall.push('@clerk/nextjs');
+                        sendLog('info', 'Adding Clerk...');
+                        break;
+                    case 'lucia':
+                        depsToInstall.push('lucia');
+                        sendLog('info', 'Adding Lucia...');
+                        break;
+                    case 'supabase-auth':
+                        if (!config.database?.includes('supabase')) {
+                            depsToInstall.push('@supabase/supabase-js');
+                        }
+                        sendLog('info', 'Adding Supabase Auth...');
+                        break;
+                }
+            }
+            // Install dependencies
+            if (depsToInstall.length > 0) {
+                const installCmd = `${pmCmd} add ${depsToInstall.join(' ')}`;
+                sendLog('command', `$ ${installCmd}`);
+                await this.executeCommand(installCmd, projectPath, sendLog);
+            }
+            // Install dev dependencies
+            if (devDepsToInstall.length > 0) {
+                const installDevCmd = `${pmCmd} add -D ${devDepsToInstall.join(' ')}`;
+                sendLog('command', `$ ${installDevCmd}`);
+                await this.executeCommand(installDevCmd, projectPath, sendLog);
+            }
+            // Initialize Prisma if needed
+            if (config.database?.includes('prisma')) {
+                const dbType = config.database.includes('sqlite') ? 'sqlite' : 'postgresql';
+                const prismaInitCmd = `${pmExec} prisma init --datasource-provider ${dbType}`;
+                sendLog('command', `$ ${prismaInitCmd}`);
+                await this.executeCommand(prismaInitCmd, projectPath, sendLog);
+                sendLog('success', 'Prisma initialized!');
+            }
+            // Initialize Tailwind if needed (for non-Next.js)
+            if (useTailwind && config.framework !== 'nextjs') {
+                const tailwindInitCmd = `${pmExec} tailwindcss init -p`;
+                sendLog('command', `$ ${tailwindInitCmd}`);
+                await this.executeCommand(tailwindInitCmd, projectPath, sendLog);
+                sendLog('success', 'Tailwind CSS configured!');
+            }
+            // Final success
+            sendLog('success', '🎉 Project created successfully!');
+            sendLog('info', `cd ${config.name} && ${pmCmd} run dev`);
+            // Send completion message
+            this.sendToClient(ws, {
+                type: 'projectCreationComplete',
+                payload: {
+                    name: config.name,
+                    path: projectPath,
+                    config
+                },
+                requestId
+            });
+            // Refresh project list
+            await this.detectAndSendNextJsProjects(ws);
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            sendLog('error', `Error: ${errorMessage}`);
+            this.sendToClient(ws, {
+                type: 'projectCreationError',
+                payload: { error: errorMessage },
+                requestId
+            });
+        }
+    }
+    /**
+     * Execute a shell command and stream output
+     */
+    executeCommand(command, cwd, sendLog) {
+        return new Promise((resolve, reject) => {
+            const homeDir = process.env.HOME || '/Users/moneyprinter';
+            const enhancedPath = [
+                `${homeDir}/.bun/bin`,
+                `${homeDir}/.nvm/versions/node/current/bin`,
+                '/opt/homebrew/bin',
+                '/usr/local/bin',
+                '/usr/bin',
+                process.env.PATH
+            ].join(':');
+            const child = (0, child_process_1.spawn)('/bin/zsh', ['-c', command], {
+                cwd,
+                env: {
+                    ...process.env,
+                    PATH: enhancedPath,
+                    HOME: homeDir
+                }
+            });
+            child.stdout?.on('data', (data) => {
+                const lines = data.toString().split('\n').filter(l => l.trim());
+                lines.forEach(line => sendLog('info', line));
+            });
+            child.stderr?.on('data', (data) => {
+                const lines = data.toString().split('\n').filter(l => l.trim());
+                lines.forEach(line => {
+                    // Don't treat all stderr as errors (npm/yarn use stderr for progress)
+                    if (line.toLowerCase().includes('error') || line.toLowerCase().includes('failed')) {
+                        sendLog('warning', line);
+                    }
+                    else {
+                        sendLog('info', line);
+                    }
+                });
+            });
+            child.on('close', (code) => {
+                if (code === 0) {
+                    resolve();
+                }
+                else {
+                    reject(new Error(`Command failed with exit code ${code}`));
+                }
+            });
+            child.on('error', (error) => {
+                reject(error);
+            });
+        });
+    }
+    // ============== End Project Creation ==============
     // ============== Copilot History ==============
     /**
      * Gère la récupération de l'historique Copilot

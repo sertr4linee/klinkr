@@ -49,6 +49,7 @@ import { MCPServerManager } from "@/components/MCPServerManager";
 import CopilotHistoryViewer from "@/components/CopilotHistoryViewer";
 import { LivePreviewWithSelector } from "@/components/LivePreviewWithSelector";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { ProjectCreationWizard } from "@/components/ProjectCreationWizard";
 import { useVSCodeBridge } from "@/hooks/useVSCodeBridge";
 import {
   CheckIcon,
@@ -93,6 +94,10 @@ const Example = () => {
     isDetectingProjects,
     // DOM Bridge setup
     setupDOMBridge,
+    isDOMBridgeSetupInProgress,
+    domBridgeSetupComplete,
+    domBridgeSetupError,
+    resetDOMBridgeSetup,
     // MCP server management
     mcpServers,
     detectMCPServers,
@@ -107,7 +112,14 @@ const Example = () => {
     getCopilotHistory,
     getCopilotHistoryConfig,
     updateCopilotHistoryConfig,
-    getAvailableCopilotVersions
+    getAvailableCopilotVersions,
+    // Project Creation
+    createProject,
+    projectCreationLogs,
+    isCreatingProject,
+    projectCreationComplete,
+    projectCreationError,
+    resetProjectCreation
   } = useVSCodeBridge();
 
   const [activeTab, setActiveTab] = useState<"chat" | "projects" | "files" | "mcp" | "activity" | "history">("chat");
@@ -466,6 +478,23 @@ const Example = () => {
               {/* CHAT TAB */}
               {activeTab === "chat" && (
                 <div className="flex flex-col items-center">
+                  {/* Project Creation Wizard Card */}
+                  <div className="w-full max-w-3xl mb-8">
+                    <ProjectCreationWizard
+                      projects={nextJsProjects}
+                      isDetecting={isDetectingProjects}
+                      onCreateProject={createProject}
+                      onRefreshProjects={detectNextJsProjects}
+                      workspacePath={workspacePath}
+                      // WebSocket-driven state for real project creation
+                      wsLogs={projectCreationLogs}
+                      wsIsCreating={isCreatingProject}
+                      wsCreationComplete={projectCreationComplete}
+                      wsCreationError={projectCreationError}
+                      wsResetCreation={resetProjectCreation}
+                    />
+                  </div>
+
                   <div className="mb-10 text-center space-y-2">
                     <h2 className="font-bold text-4xl text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
                       What will you build today?
@@ -474,7 +503,7 @@ const Example = () => {
                       Describe your app idea and let klinkr handle the rest.
                     </p>
                   </div>
-                  
+
                   {/* Selected Model Display */}
                   {selectedModel && (
                     <div className="mb-8 flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-500">
@@ -695,6 +724,9 @@ const Example = () => {
                     onSetupDOMBridge={setupDOMBridge}
                     sendToCopilot={sendToCopilot}
                     isLoading={isDetectingProjects}
+                    isDOMBridgeSetupInProgress={isDOMBridgeSetupInProgress}
+                    domBridgeSetupComplete={domBridgeSetupComplete}
+                    domBridgeSetupError={domBridgeSetupError}
                   />
                 </div>
               )}

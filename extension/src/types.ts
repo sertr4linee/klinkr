@@ -35,11 +35,11 @@ export interface WorkspaceInfo {
 }
 
 export interface WebSocketMessage {
-  type: 
+  type:
     // Model management
-    | 'listModels' | 'changeModel' | 'modelsUpdated' | 'modelChanged' 
+    | 'listModels' | 'changeModel' | 'modelsUpdated' | 'modelChanged'
     // Basic
-    | 'error' | 'ping' | 'pong' 
+    | 'error' | 'ping' | 'pong'
     // Chat messages (legacy vscode.lm)
     | 'sendMessage' | 'messageChunk' | 'messageComplete' | 'messageError'
     // Workspace
@@ -52,6 +52,8 @@ export interface WebSocketMessage {
     | 'activity' | 'startTracking' | 'stopTracking'
     // Next.js projects
     | 'detectNextJsProjects' | 'nextJsProjectsDetected' | 'startNextJsProject' | 'stopNextJsProject' | 'nextJsProjectStatus'
+    // Project creation
+    | 'createProject' | 'projectCreationLog' | 'projectCreationComplete' | 'projectCreationError'
     // DOM Bridge setup
     | 'setupDOMBridge' | 'domBridgeSetupComplete' | 'domBridgeSetupError'
     // MCP servers
@@ -61,10 +63,27 @@ export interface WebSocketMessage {
     // REALM Protocol
     | 'realm_event'
     // Copilot History
-    | 'getCopilotHistory' | 'copilotHistory' | 'getCopilotHistoryConfig' | 'copilotHistoryConfig' 
+    | 'getCopilotHistory' | 'copilotHistory' | 'getCopilotHistoryConfig' | 'copilotHistoryConfig'
     | 'updateCopilotHistoryConfig' | 'getAvailableCopilotVersions' | 'availableCopilotVersions';
   payload?: any;
   requestId?: string;
+}
+
+// Project creation types
+export interface ProjectConfig {
+  name: string;
+  framework: string;
+  features: string[];
+  styling: string;
+  database: string | null;
+  auth: string | null;
+  packageManager: string;
+}
+
+export interface ProjectCreationLog {
+  type: 'info' | 'success' | 'error' | 'warning' | 'command';
+  message: string;
+  timestamp: number;
 }
 
 export interface NextJsProject {
@@ -75,6 +94,7 @@ export interface NextJsProject {
   port: number;
   status: 'stopped' | 'starting' | 'installing' | 'running' | 'error';
   error?: string;
+  domBridgeSetup?: boolean;
 }
 
 export interface MCPServer {

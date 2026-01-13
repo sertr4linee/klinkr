@@ -41,30 +41,48 @@ const modelBridge_1 = require("./modelBridge");
 const chatParticipant_1 = require("./chatParticipant");
 const sidebarProvider_1 = require("./sidebarProvider");
 const processManager_1 = require("./processManager");
+const panelManager_1 = require("./panelManager");
 let server;
+let panelManager;
 async function activate(context) {
     console.log('[AI App Builder] Extension activating...');
     const config = vscode.workspace.getConfiguration('aiAppBuilder');
     const port = config.get('serverPort', 57129);
     const autoOpen = config.get('autoOpen', true);
+    const panelAutoStart = config.get('panelAutoStart', true);
     // Initialiser le ModelBridge
     const modelBridge = modelBridge_1.ModelBridge.getInstance();
     // Initialiser le Chat Participant Bridge (@builder)
     const chatParticipant = chatParticipant_1.ChatParticipantBridge.getInstance();
     chatParticipant.register(context);
+    // Initialiser le Panel Manager
+    panelManager = panelManager_1.PanelManager.getInstance(context);
     // Enregistrer le Sidebar Provider
-    const sidebarProvider = new sidebarProvider_1.SidebarProvider(context.extensionUri, port);
+    const sidebarProvider = new sidebarProvider_1.SidebarProvider(context.extensionUri, context);
+    sidebarProvider.setPanelManager(panelManager);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(sidebarProvider_1.SidebarProvider.viewType, sidebarProvider));
     // Commande: Ouvrir le panel
     const openPanelCmd = vscode.commands.registerCommand('aiAppBuilder.openPanel', async () => {
-        const url = `http://127.0.0.1:${port}`;
+        // Check if panel is running
+        if (panelManager?.getState() !== 'running') {
+            const start = await vscode.window.showWarningMessage('Panel is not running. Start it first?', 'Start Panel', 'Cancel');
+            if (start === 'Start Panel') {
+                await vscode.commands.executeCommand('aiAppBuilder.startPanel');
+                // Wait a bit for panel to start
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+            else {
+                return;
+            }
+        }
+        const panelUrl = panelManager?.getUrl() || `http://127.0.0.1:3001`;
         // Ouvrir dans le navigateur externe ou Simple Browser
         const choice = await vscode.window.showQuickPick(['Open in Simple Browser (inside VS Code)', 'Open in External Browser'], { placeHolder: 'Where would you like to open the AI App Builder?' });
         if (choice?.includes('Simple Browser')) {
-            await vscode.commands.executeCommand('simpleBrowser.show', vscode.Uri.parse(url));
+            await vscode.commands.executeCommand('simpleBrowser.show', vscode.Uri.parse(panelUrl));
         }
         else if (choice?.includes('External')) {
-            await vscode.env.openExternal(vscode.Uri.parse(url));
+            await vscode.env.openExternal(vscode.Uri.parse(panelUrl));
         }
     });
     // Commande: Lister les modèles
@@ -163,20 +181,104 @@ async function activate(context) {
         }
     });
     context.subscriptions.push(processStatsCmd);
-    // Démarrer le serveur
-    try {
-        server = new server_1.AppBuilderServer(port, context);
-        const url = await server.start();
-        vscode.window.showInformationMessage(`🚀 AI App Builder running at ${url}`, 'Open Panel').then(selection => {
-            if (selection === 'Open Panel') {
+    // ============== Panel Commands ==============
+    const startPanelCmd = vscode.commands.registerCommand('aiAppBuilder.startPanel', async () => {
+        try {
+            await panelManager?.start();
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(`Failed to start panel: ${error}`);
+        }
+    });
+    const stopPanelCmd = vscode.commands.registerCommand('aiAppBuilder.stopPanel', async () => {
+        try {
+            await panelManager?.stop();
+            vscode.window.showInformationMessage('Panel stopped');
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(`Failed to stop panel: ${error}`);
+        }
+    });
+    const restartPanelCmd = vscode.commands.registerCommand('aiAppBuilder.restartPanel', async () => {
+        try {
+            await panelManager?.restart();
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(`Failed to restart panel: ${error}`);
+        }
+    });
+    const showPanelLogsCmd = vscode.commands.registerCommand('aiAppBuilder.showPanelLogs', () => {
+        panelManager?.showLogs();
+    });
+    const clearPanelLogsCmd = vscode.commands.registerCommand('aiAppBuilder.clearPanelLogs', () => {
+        panelManager?.clearLogs();
+    });
+    const panelQuickActionsCmd = vscode.commands.registerCommand('aiAppBuilder.panelQuickActions', async () => {
+        const state = panelManager?.getState() || 'stopped';
+        const items = [];
+        if (state === 'stopped' || state === 'error') {
+            items.push({ label: '$(play) Start Panel', description: 'Start the Next.js panel' });
+        }
+        if (state === 'running') {
+            items.push({ label: '$(browser) Open Panel', description: `Open at ${panelManager?.getUrl()}` });
+            items.push({ label: '$(refresh) Restart Panel', description: 'Restart the panel' });
+            items.push({ label: '$(stop) Stop Panel', description: 'Stop the panel' });
+        }
+        items.push({ label: '$(output) Show Logs', description: 'View panel output' });
+        items.push({ label: '$(clear-all) Clear Logs', description: 'Clear panel logs' });
+        const selected = await vscode.window.showQuickPick(items, {
+            placeHolder: `Panel Status: ${state} (${panelManager?.getMode()} mode)`
+        });
+        if (selected) {
+            if (selected.label.includes('Start')) {
+                vscode.commands.executeCommand('aiAppBuilder.startPanel');
+            }
+            else if (selected.label.includes('Stop')) {
+                vscode.commands.executeCommand('aiAppBuilder.stopPanel');
+            }
+            else if (selected.label.includes('Restart')) {
+                vscode.commands.executeCommand('aiAppBuilder.restartPanel');
+            }
+            else if (selected.label.includes('Open')) {
                 vscode.commands.executeCommand('aiAppBuilder.openPanel');
             }
-        });
-        // Auto-open si configuré
-        if (autoOpen) {
-            setTimeout(() => {
-                vscode.commands.executeCommand('simpleBrowser.show', vscode.Uri.parse(url));
-            }, 1000);
+            else if (selected.label.includes('Show Logs')) {
+                vscode.commands.executeCommand('aiAppBuilder.showPanelLogs');
+            }
+            else if (selected.label.includes('Clear')) {
+                vscode.commands.executeCommand('aiAppBuilder.clearPanelLogs');
+            }
+        }
+    });
+    context.subscriptions.push(startPanelCmd, stopPanelCmd, restartPanelCmd, showPanelLogsCmd, clearPanelLogsCmd, panelQuickActionsCmd);
+    // Démarrer le serveur WebSocket
+    try {
+        server = new server_1.AppBuilderServer(port, context);
+        const serverUrl = await server.start();
+        console.log(`[AI App Builder] WebSocket server running at ${serverUrl}`);
+        // Auto-start panel si configuré
+        if (panelAutoStart) {
+            try {
+                await panelManager?.start();
+                // Auto-open si configuré et panel démarré
+                if (autoOpen && panelManager?.getState() === 'running') {
+                    setTimeout(() => {
+                        const panelUrl = panelManager?.getUrl() || serverUrl;
+                        vscode.commands.executeCommand('simpleBrowser.show', vscode.Uri.parse(panelUrl));
+                    }, 2000);
+                }
+            }
+            catch (error) {
+                console.error('[AI App Builder] Failed to auto-start panel:', error);
+                // Continue without panel - server is still running
+            }
+        }
+        else {
+            vscode.window.showInformationMessage(`AI App Builder server running at ${serverUrl}`, 'Start Panel').then(selection => {
+                if (selection === 'Start Panel') {
+                    vscode.commands.executeCommand('aiAppBuilder.startPanel');
+                }
+            });
         }
     }
     catch (error) {
@@ -184,8 +286,14 @@ async function activate(context) {
     }
     console.log('[AI App Builder] Extension activated');
 }
-function deactivate() {
+async function deactivate() {
     console.log('[AI App Builder] Deactivating...');
+    // Stop panel first
+    if (panelManager) {
+        await panelManager.stop();
+        panelManager.dispose();
+    }
+    // Stop server
     if (server) {
         server.stop();
     }
